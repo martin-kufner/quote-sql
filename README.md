@@ -9,7 +9,7 @@ I created this library while coding for different projects, and had lots of Here
 
 My strategy is to segment SQL Queries in readable junks, which can be individually tested and then combine their sql to the final query.
 
-QuoteSql is used in production, but is still bleeding edge.
+QuoteSql is used in production, but is still bleeding edge - and there is not a fully sync between doc and code.
 
 If you think QuoteSql is interesting, let's chat!
 Also if you have problems using it, just drop me a note.
@@ -23,6 +23,10 @@ Best Martin
 
 `QuoteSql.new("SELECT %field__text").quote(field__text: 9).to_sql`
 => SELECT 9::TEXT
+
+### Rails models
+`QuoteSql.new(Users.limit(10).select("%columns")).quote(columns: ['first_name', 'last_name').to_sql` 
+=> SELECT first_name, last_name FROM users LIMIT 10
 
 ### Quoting of columns and table from a model - or an object responding to table_name and column_names or columns
 `QuoteSql.new("SELECT %columns FROM %table_name").quote(table: User).to_sql`
@@ -48,8 +52,12 @@ Values are be ordered in sequence of columns. Missing value entries are substitu
       ON CONFLICT ("id") DO NOTHING
       
 ### Columns from a list
-`QuoteSql.new("SELECT %columns").quote(columns: [:a, :"b.c", c: "jsonb_build_object('d', 1)"]).to_sql`
-  => SELECT "a","b"."c",jsonb_build_object('d', 1) AS c
+`QuoteSql.new("SELECT %columns").quote(columns: [:a, :"b.c", c: {d: field}]).to_sql`
+  => SELECT "a","b"."c",jsonb_build_object('d', field) AS c 
+
+`QuoteSql.new("SELECT %columns").quote(columns: [:a, :"b.c", c: {d: field, nil: false}]).to_sql`
+  => SELECT "a","b"."c",jsonb_strip_nulls(jsonb_build_object('d', 1)) AS c 
+
 
 ### Execution of a query
 `QuoteSql.new("Select 1 as abc").result` => [{:abc=>1}]
@@ -110,6 +118,16 @@ with optional array dimension
   - +Symbol+ value will become the column name e.g. {table: :column} => "table"."column"
   - +String+ value will become the expression, the key the AS {result: "SUM(*)"} => SUM(*) AS result
   - +Proc+ are executed with the +QuoteSQL::Quoter+ object as parameter and added as raw SQL
+
+## Shortcuts and functions
+- `QuoteSQL("select %abc", abc: 1)` == `QuoteSql.new("select %abc").quote(abc: 1)`
+- when you have in your initializer `String.include QuoteSql::Extension` you can do e.g. `"select %abc".quote_sql(abc: 1)`
+- when you have in your initializer `ActiveRecord::Relation.include QuoteSql::Extension` you can do e.g.  `Profile.limit(10).select('%abc').quote_sql(abc: 1)`
+
+## Debug and dump
+If you have pg_format installed you can get the resulting query inspected: 
+  `QuoteSql.new("select %abc").quote(abc: 1).dsql`
+  
 
 ## Installing
 `gem install quote-sql`
