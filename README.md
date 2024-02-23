@@ -1,5 +1,6 @@
 # QuoteSql - Tool to build and run SQL queries easier
 I've built this library as an addition to ActiveRecord and Arel, however you can use it with any sql database and plain Ruby.
+However currently it is just used with PostgreSQL.
 
 Creating SQL queries and proper quoting becomes complicated especially when you need advanced queries.
 
@@ -8,7 +9,7 @@ I created this library while coding for different projects, and had lots of Here
 
 My strategy is to segment SQL Queries in readable junks, which can be individually tested and then combine their sql to the final query.
 
-QuoteSql is used in production, but is still evolving.
+QuoteSql is used in production, but is still bleeding edge.
 
 If you think QuoteSql is interesting, let's chat!
 Also if you have problems using it, just drop me a note.
@@ -126,8 +127,9 @@ Add this to config/initializers/quote_sql.rb
     end  
 
 ## Todos
+- Functionalities not yet used in my production might not work
 - More documentation
-- Tests
+- Tests missing
 - Missing functionalities
   - Prepare
   - which other - let me know!
