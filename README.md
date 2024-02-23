@@ -105,3 +105,19 @@ with optional array dimension
   - +Symbol+ value will become the column name e.g. {table: :column} => "table"."column"
   - +String+ value will become the expression, the key the AS {result: "SUM(*)"} => SUM(*) AS result
   - +Proc+ are executed with the +QuoteSQL::Quoter+ object as parameter and added as raw SQL
+
+## Installing
+`gem install quote-sql`
+or in Gemfile
+`gem 'quote-sql'`
+
+### Ruby on Rails
+Add this to config/initializers/quote_sql.rb
+
+    ActiveSupport.on_load(:active_record) do
+      require 'quote_sql'
+      QuoteSql.db_connector = ActiveRecord::Base
+      String.include QuoteSql::Extension
+      ActiveRecord::Relation.include QuoteSql::Extension
+    end  
+
