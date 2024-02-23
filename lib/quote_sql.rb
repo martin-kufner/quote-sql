@@ -1,4 +1,4 @@
-Dir.glob(__FILE__.sub(/\.rb$/, "/*.rb")).each { require(_1) unless _1[/test\.rb$/] }
+Dir.glob(__FILE__.sub(/\.rb$/, "/*.rb")).each { require(_1) unless _1[/(deprecated|test)\.rb$/] }
 
 # Tool to build and run SQL queries easier
 #
@@ -294,6 +294,15 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
 
   extend Quoting
 
+  def self.test
+    require __dir__ + "/quote_sql/test.rb"
+    Test
+  end
+end
+
+def QuoteSQL(sql, **options)
+  rv = QuoteSql.new(sql)
+  options.any? ? rv.quote(**options) : rv
 end
 
 QuoteSql.include QuoteSql::Formater

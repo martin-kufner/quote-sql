@@ -13,7 +13,7 @@ class QuoteSql
       when /(?:^|(.*)_)table$/i
         table
       when /(?:^|(.*)_)columns?$/i
-        column_names
+        columns
       when /(?:^|(.*)_)(table_name?s?)$/i
         table_name
       when /(?:^|(.*)_)(column_name?s?)$/i
@@ -22,9 +22,9 @@ class QuoteSql
         ident_name
       when /(?:^|(.*)_)constraints?$/i
         quotable.to_s
-      when /(?:^|(.*)_)(raw|sql)$/
+      when /(?:^|(.*)_)(raw|sql)$/i
         quotable.to_s
-      when /(?:^|(.*)_)(values?)$/
+      when /(?:^|(.*)_)(values?)$/i
         values
       else
         quote
@@ -121,6 +121,20 @@ class QuoteSql
       end
     end
 
+    def columns(item = @quotable)
+      if item.respond_to?(:column_names)
+        item = item.column_names
+      elsif item.class.respond_to?(:column_names)
+        item = item.class.column_names
+      elsif item.is_a?(Array)
+        if item[0].respond_to?(:name)
+          item = item.map(&:name)
+        end
+      end
+      @qsql.column_names ||= item
+      ident_name(item)
+    end
+
     def column_names(item = @quotable)
       if item.respond_to?(:column_names)
         item = item.column_names
@@ -131,6 +145,13 @@ class QuoteSql
       end
       @qsql.column_names ||= item
       ident_name(item)
+    end
+
+    def json_build_object(h)
+      compact = h.delete(nil) == false
+      rv = "jsonb_build_object(" + h.map { "'#{_1}',#{_2}" }.join(",") + ")"
+      return rv unless compact
+      "jsonb_strip_nulls(#{rv})"
     end
 
     def ident_name(item = @quotable)
@@ -147,14 +168,18 @@ class QuoteSql
           end
         end.join(",")
       when Hash
-        item.map do
-          case _2
+        item.map do |k,v|
+          case v
           when Symbol
-            _quote_column_name(_1, _2)
+            _quote_column_name(k, v)
           when String
-            "#{_2} AS #{_1}"
+            "#{v} AS #{k}"
           when Proc
             item.call(self)
+          when Hash
+            "#{json_build_object(v)} AS #{k}"
+          else
+            raise ArgumentError
           end
         end.join(",")
       else

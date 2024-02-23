@@ -11,4 +11,5 @@ QuoteSql helps you creating SQL queries and proper quoting especially with advan
   s.files = Dir["lib/**/*", "README.md"]
   s.homepage    = "https://github.com/martin-kufner/quote-sql"
   s.license     = "MIT"
+  s.required_ruby_version = '~> 3.0'
 end

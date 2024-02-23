@@ -39,7 +39,6 @@ module QuoteSql::Test
       "SELECT * FROM #{self.class.table_name}"
     end
   end
-
   class << self
     def test_columns_and_table_name_simple
       expected Arel.sql(%(SELECT "a","b"."c" FROM "my_table"))
