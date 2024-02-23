@@ -50,6 +50,10 @@ Values are be ordered in sequence of columns. Missing value entries are substitu
 `QuoteSql.new("SELECT %columns").quote(columns: [:a, :"b.c", c: "jsonb_build_object('d', 1)"]).to_sql`
   => SELECT "a","b"."c",jsonb_build_object('d', 1) AS c
 
+### Execution of a query
+`QuoteSql.new("Select 1 as abc").result` => [{:abc=>1}]
+
+
 ## Substitution of mixins with quoted values 
   In the SQL matches of `%foo` or `%{foo}` or `%foo_4_bar` or `%{foo_4_bar}` the *"mixins"*
   are substituted with quoted values
@@ -121,3 +125,9 @@ Add this to config/initializers/quote_sql.rb
       ActiveRecord::Relation.include QuoteSql::Extension
     end  
 
+## Todos
+- More documentation
+- Tests
+- Missing functionalities
+  - Prepare
+  - which other - let me know!
