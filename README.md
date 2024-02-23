@@ -1,4 +1,19 @@
 # QuoteSql - Tool to build and run SQL queries easier
+I've built this library as an addition to ActiveRecord and Arel, however you can use it with any sql database and plain Ruby.
+
+Creating SQL queries and proper quoting becomes complicated especially when you need advanced queries.
+
+I created this library while coding for different projects, and had lots of Heredoc SQL queries, which pretty quickly becomes the kind of: 
+> When I wrote these lines of code, just me and God knew what they mean. Now its just God.
+
+My strategy is to segment SQL Queries in readable junks, which can be individually tested and then combine their sql to the final query.
+
+QuoteSql is used in production, but is still evolving.
+
+If you think QuoteSql is interesting, let's chat!
+Also if you have problems using it, just drop me a note.
+
+Best Martin
 
 ## Examples
 ### Simple quoting
@@ -15,7 +30,7 @@
 `QuoteSql.new("SELECT a,b,%raw FROM table").quote(raw: "jsonb_build_object('a', 1)").to_sql`
   => SELECT "a,b,jsonb_build_object('a', 1) FROM table
 
-### Injecting ActiveRecord or Arel.sql
+### Injecting ActiveRecord, Arel.sql or QuoteSql
 `QuoteSql.new("SELECT %column_names FROM (%any_name) a").
     quote(any_name: User.select("%column_names").where(id: 3), column_names: [:firstname, :lastname]).to_sql`
   => SELECT firstname, lastname FROM (SELECT firstname, lastname FROM users where id = 3)
