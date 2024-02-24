@@ -127,7 +127,11 @@ with optional array dimension
 ## Debug and dump
 If you have pg_format installed you can get the resulting query inspected: 
   `QuoteSql.new("select %abc").quote(abc: 1).dsql`
-  
+
+# Test
+Minimal tests you can run by
+`QuoteSql.test.all`
+You can find them in /lib/quote_sql/test.rb
 
 ## Installing
 `gem install quote-sql`
