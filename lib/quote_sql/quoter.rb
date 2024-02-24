@@ -5,7 +5,15 @@ class QuoteSql
       @key, @quotable = key, quotable
     end
 
+    def quotes
+      @qsql.quotes
+    end
+
     attr_reader :key, :quotable
+
+    def name
+      @key.sub(/_[^_]+$/, '')
+    end
 
     def to_sql
       return @quotable.call(self) if @quotable.is_a? Proc
@@ -24,8 +32,10 @@ class QuoteSql
         quotable.to_s
       when /(?:^|(.*)_)(raw|sql)$/i
         quotable.to_s
-      when /(?:^|(.*)_)(values?)$/i
-        values
+      when /^(.+)_values$/i
+        data_values
+      when /values$/i
+        insert_values
       else
         quote
       end
@@ -56,24 +66,75 @@ class QuoteSql
 
     end
 
-    def values(item = @quotable)
+    def data_values(item = @quotable)
+      item = Array(item).compact
+      column_names = @qsql.quotes[:"#{name}_columns"].dup
+      if column_names.is_a? Hash
+        types = column_names.values.map { "::#{_1.upcase}" if _1 }
+        column_names = column_names.keys
+      end
+      if item.all? { _1.is_a?(Hash) }
+        column_names ||= item.flat_map { _1.keys.sort }.uniq
+        item.map! { _1.fetch_values(*column_names) {} }
+      end
+      if item.all? { _1.is_a?(Array) }
+        length, overflow = item.map { _1.length }.uniq
+        raise ArgumentError, "all values need to have the same length" if overflow
+        column_names ||= (1..length).map{"column#{_1}"}
+        raise ArgumentError, "#{name}_columns and value lengths need to be the same" if column_names.length != length
+        values = item.map { value(_1) }
+      else
+        raise ArgumentError, "Either all type Hash or Array"
+      end
+      if types.present?
+        value = values[0][1..-2].split(/\s*,\s*/)
+        types.each_with_index { value[_2] << _1 || ""}
+        values[0] = "(" + value.join(",") + ")"
+      end
+      # values[0] { _1 << types[_1] || ""}
+      "(VALUES #{values.join(",")}) AS #{ident_name name} (#{ident_name column_names})"
+    end
+
+
+    def insert_values(item = @quotable)
       case item
       when Arel::Nodes::SqlLiteral
         item = Arel.sql("(#{item})") unless item[/^\s*\(/] and item[/\)\s*$/]
         return item
       when Array
+        item.compact!
+        column_names = (@qsql.quotes[:columns] || @qsql.quotes[:column_names]).dup
+        types = []
+        if column_names.is_a? Hash
+          types = column_names.values.map { "::#{_1.upcase}" if _1 }
+          column_names = column_names.keys
+        elsif column_names.is_a? Array
+          column_names = column_names.map do |column|
+            types << column.respond_to?(:sql_type) ? "::#{column.sql_type}" : nil
+            column.respond_to?(:name) ? column.name : column
+          end
+        end
 
-        differences = item.map { _1.is_a?(Array) && _1.length }.uniq
-        if differences.length == 1
-          item.compact.map { value(_1) }.join(", ")
+        if item.all? { _1.is_a?(Hash) }
+          column_names ||= item.flat_map { _1.keys.sort }.uniq
+          item.map! { _1.fetch_values(*column_names) {} }
+        end
+
+        if item.all? { _1.is_a?(Array) }
+          length, overflow = item.map { _1.length }.uniq
+          raise ArgumentError, "all values need to have the same length" if overflow
+          raise ArgumentError, "#{name}_columns and value lengths need to be the same" if column_names and column_names.length != length
+          values = item.map { value(_1) }
         else
-          value([item])
+          raise ArgumentError, "Either all type Hash or Array"
+        end
+        if column_names.present?
+          "(#{ident_name column_names}) VALUES #{values.join(",")}"
+        else
+          "VALUES #{values.join(",")}"
         end
       when Hash
         value([item])
-      else
-        return item.to_sql if item.respond_to? :to_sql
-        "(" + _quote(item) + ")"
       end
     end
 
@@ -127,7 +188,7 @@ class QuoteSql
       elsif item.class.respond_to?(:column_names)
         item = item.class.column_names
       elsif item.is_a?(Array)
-        if item[0].respond_to?(:name)
+        if item.all?{ _1.respond_to?(:name) }
           item = item.map(&:name)
         end
       end

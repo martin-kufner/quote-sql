@@ -151,18 +151,29 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
   end
 
   class Error < ::RuntimeError
-    def initialize(quote_sql)
+    def initialize(quote_sql, errors)
       @object = quote_sql
+      @errors = errors
     end
 
+    attr_reader :object, :errors
+
+    def sql
+      @object.original.inspect
+    end
+
+    # def inspect
+    #   super + errors.flat_map { [_1.inspect, _1.backtrace] }
+    # end
+
     def message
-      super + %Q@<QuoteSql #{@object.original.inspect} #{@object.errors.inspect}>@
+      super + %Q@<QuoteSql #{sql} #{@object.errors.inspect}>@
     end
   end
 
   def to_sql
     mixin!
-    raise Error.new(self) if errors?
+    raise Error.new(self, errors) if errors?
     return Arel.sql @sql if defined? Arel
     @sql
   end
@@ -224,8 +235,8 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
   def errors
     @quotes.to_h do |k, v|
       r = @resolved[k]
-      next [nil, nil] unless r.nil? or r.is_a?(Exception)
-      [k, "#{@quotes[k].inspect} => #{v.inspect}"]
+      next [nil, nil] if r.nil? or not r.is_a?(Exception)
+      [k, {@quotes[k].inspect => v.inspect, exc: r, backtrace: r.backtrace}]
     end.compact
   end
 
