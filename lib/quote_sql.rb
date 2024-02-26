@@ -40,6 +40,7 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
 
     @tables = {}
     @columns = {}
+    @casts = {}
   end
 
   attr_reader :sql, :quotes, :original, :binds, :tables, :columns
@@ -48,31 +49,31 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
     @tables[name&.to_sym].dup
   end
 
-  def columns(name=nil)
+  def columns(name = nil)
     @columns[name&.to_sym].dup
+  end
+
+  def casts(name = nil)
+    unless rv = @casts[name&.to_sym]
+      table = table(name) or return
+      return unless table.respond_to? :columns
+      rv = table.columns.to_h { [_1.name.to_sym, _1.sql_type] }
+    end
+    rv
   end
 
   # Add quotes keys are symbolized
   def quote(quotes = {})
-    re = /(?:^|(.*)_)(table|columns)$/i
+    re = /(?:^|(.*)_)(table|columns|casts)$/i
     quotes.keys.grep(re).each do |quote|
       _, name, type = quote.to_s.match(re)&.to_a
-      case type
-      when "table"
-        value = quotes.delete quote
-        value = Raw.sql(value) if value.class.to_s == "Arel::Nodes::SqlLiteral"
-        @tables[name&.to_sym] = value
-      when "columns"
-        value = quotes.delete quote
-        value = Raw.sql(value) if value.class.to_s == "Arel::Nodes::SqlLiteral"
-        @columns[name&.to_sym] = value
-      end
+      value = quotes.delete quote
+      value = Raw.sql(value) if value.class.to_s == "Arel::Nodes::SqlLiteral"
+      instance_variable_get(:"@#{type.sub(/s*$/,'s')}")[name&.to_sym] = value
     end
     @quotes.update quotes.transform_keys(&:to_sym)
     self
   end
-
-
 
   def to_sql
     mixin!

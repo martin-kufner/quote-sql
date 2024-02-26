@@ -30,6 +30,10 @@ class QuoteSql
       @qsql.columns(name || self.name)
     end
 
+    def casts(name = nil)
+      @qsql.casts(name || self.name)
+    end
+
     def ident_columns(name = nil)
       item = columns(name || self.name)
       unless item
@@ -82,9 +86,11 @@ class QuoteSql
       when /(?:^|(.*)_)(ident)$/i
         _ident
       when /(?:^|(.*)_)constraints?$/i
-        quotable.to_s
+        quotable
       when /(?:^|(.*)_)(raw|sql)$/i
-        quotable.to_s
+        quotable
+      when /^(.+)_json$/i
+        data_json
       when /^(.+)_values$/i
         data_values
       when /values$/i
@@ -132,6 +138,15 @@ class QuoteSql
       end
       Raw.sql "(#{rv.join(",")})"
     end
+
+    def data_json(item = @quotable)
+      casts = self.casts(name)
+      columns = self.columns(name) || casts&.keys
+      column_cast = columns&.map { "#{QuoteSql.quote_column_name(_1)} #{casts&.dig(_1) || "TEXT"}" }
+      item = [item].flatten.compact.as_json.map{_1.slice(*columns.map(&:to_s))}
+      Raw.sql "json_to_recordset('#{item.to_json.gsub(/'/,"''")}') AS #{QuoteSql.quote_column_name name}(#{column_cast.join(',')})"
+    end
+
 
     def data_values(item = @quotable)
       item = Array(item).compact

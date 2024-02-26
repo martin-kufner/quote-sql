@@ -54,6 +54,13 @@ class QuoteSql::Test
 
   private
 
+  def test_columns
+    expected <<~SQL
+      SELECT x, "a", "b", "c", "d"
+    SQL
+    "SELECT x, %x_columns ".quote_sql(x_columns: %i[a b c d])
+  end
+
   def test_columns_and_table_name_simple
     expected <<~SQL
       SELECT "my_table"."a", "b", "gaga"."c", "my_table"."e" AS "d", "gaga"."d" AS "f", 1 + 2 AS "g", whatever AS raw FROM "my_table"
@@ -132,7 +139,12 @@ class QuoteSql::Test
 
   def test_from_values_hash_with_type_columns
     expected <<~SQL
-      SELECT * FROM (VALUES ('a'::TEXT, 1::INTEGER, true::BOOLEAN, NULL::FLOAT), ('a', 1, true, NULL), (NULL, 1, NULL, 2)) AS "x" ("a", "b", "c", "d")
+      SELECT * 
+            FROM (VALUES 
+                        ('a'::TEXT, 1::INTEGER, true::BOOLEAN, NULL::FLOAT), 
+                        ('a', 1, true, NULL), 
+                        (NULL, 1, NULL, 2)
+                  ) AS "x" ("a", "b", "c", "d")
     SQL
     "SELECT * FROM %x_values".quote_sql(
       x_columns: {
@@ -162,11 +174,19 @@ class QuoteSql::Test
     "INSERT INTO x %values".quote_sql(values: [{ a: 'a', b: 1, c: true, d: nil }])
   end
 
-  def test_columns
+  def test_from_json
     expected <<~SQL
-      SELECT x, "a", "b", "c", "d"
+      SELECT * FROM json_to_recordset('[{"a":1,"b":"foo"},{"a":"2"}]') as "x" ("a" int, "b" text)
     SQL
-    "SELECT x, %x_columns ".quote_sql(x_columns: %i[a b c d])
+    "SELECT * FROM %x_json".quote_sql(x_casts: {a: "int", b: "text"}, x_json: [{ a: 1, b: 'foo'}, {a: '2', c: 'bar'}])
+  end
+
+  def test_json_insert
+    expected <<~SQL
+        INSERT INTO users (name, color) SELECT * from json_to_recordset('[{"name":"auge","color":"#611333"}]') AS "x"("name" text,"color" text)
+    SQL
+    x_json = {"first_name"=>nil, "last_name"=>nil, "stripe_id"=>nil, "credits"=>nil, "avatar"=>nil, "name"=>"auge", "color"=>"#611333", "founder"=>nil, "language"=>nil, "country"=>nil, "data"=>{}, "created_at"=>"2020-11-19T09:30:18.670Z", "updated_at"=>"2020-11-19T09:40:00.063Z"}
+    "INSERT INTO users (name, color) SELECT * from %x_json".quote_sql(x_casts: {name: "text", color: "text"}, x_json:)
   end
 
   # def test_q3
