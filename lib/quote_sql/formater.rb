@@ -9,11 +9,13 @@ class QuoteSql
 
     def to_formatted_sql
       sql = respond_to?(:to_sql) ? to_sql : to_s
-      IO.popen(PG_FORMAT_BIN, "r+", err: "/dev/null") do |f|
-        f.write(sql)
-        f.close_write
-        f.read
-      end
+      Niceql::Prettifier.prettify_sql(sql)
+
+      # IO.popen(PG_FORMAT_BIN, "r+", err: "/dev/null") do |f|
+      #   f.write(sql)
+      #   f.close_write
+      #   f.read
+      # end
     rescue
       sql
     end

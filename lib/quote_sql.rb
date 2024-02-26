@@ -1,90 +1,8 @@
 Dir.glob(__FILE__.sub(/\.rb$/, "/*.rb")).each { require(_1) unless _1[/(deprecated|test)\.rb$/] }
 
 # Tool to build and run SQL queries easier
-#
-#   QuoteSql.new("SELECT %field").quote(field: "abc").to_sql
-#   => SELECT 'abc'
-#
-#   QuoteSql.new("SELECT %field__text").quote(field__text: 9).to_sql
-#   => SELECT 9::TEXT
-#
-#   QuoteSql.new("SELECT %columns FROM %table_name").quote(table: User).to_sql
-#   => SELECT "id",firstname","lastname",... FROM "users"
-#
-#   QuoteSql.new("SELECT a,b,%raw FROM table").quote(raw: "jsonb_build_object('a', 1)").to_sql
-#   => SELECT "a,b,jsonb_build_object('a', 1) FROM table
-#
-#   QuoteSql.new("SELECT %column_names FROM (%any_name) a").
-#     quote(any_name: User.select("%column_names").where(id: 3), column_names: [:firstname, :lastname]).to_sql
-#   => SELECT firstname, lastname FROM (SELECT firstname, lastname FROM users where id = 3)
-#
-#   QuoteSql.new("INSERT INTO %table (%columns) VALUES %values ON CONFLICT (%constraint) DO NOTHING").
-#     quote(table: User, values: [
-#       {firstname: "Albert", id: 1, lastname: "Müller"},
-#       {lastname: "Schultz", firstname: "herbert"}
-#     ], constraint: :id).to_sql
-#   => INSERT INTO "users" ("id", "firstname", "lastname", "created_at")
-#       VALUES (1, 'Albert', 'Müller', CURRENT_TIMESTAMP), (DEFAULT, 'herbert', 'Schultz', CURRENT_TIMESTAMP)
-#       ON CONFLICT ("id") DO NOTHING
-#
-#   QuoteSql.new("SELECT %columns").quote(columns: [:a, :"b.c", c: "jsonb_build_object('d', 1)"]).to_sql
-#   => SELECT "a","b"."c",jsonb_build_object('d', 1) AS c
-#
-# Substitution
-#   In the SQL matches of %foo or %{foo} or %foo_4_bar or %{foo_4_bar} the *"mixins"*
-#   are substituted with quoted values
-#   the values are looked up from the options given in the quotes method
-#   the mixins can be recursive, Caution! You need to take care, you can create infintive loops!
-#
-# Special mixins are
-# - %table | %table_name | %table_names
-# - %column | %columns | %column_names
-# - %ident | %constraint | %constraints quoting for database columns
-# - %raw | %sql inserting raw SQL
-# - %value | %values creates value section for e.g. insert
-#   - In the right order
-#     - Single value => (2)
-#     - +Array+ => (column, column, column) n.b. has to be the correct order
-#     - +Array+ of +Array+ => (...),(...),(...),...
-#   - if the columns option is given (or implicitely by setting table)
-#     - +Hash+ values are ordered according to the columns option, missing values are replaced by DEFAULT
-#     - +Array+ of +Hash+ multiple record insert
-# - %bind is replaced with the current bind sequence.
-#   Without appended number the first %bind => $1, the second => $2 etc.
-#   - %bind\\d+ => $+Integer+ e.g. %bind7 => $7
-#   - %bind__text => $1 and it is registered as text - this is used in prepared statements TODO
-#   - %key_bind__text => $1 and it is registered as text when using +Hash+ in the execute
-#     $1 will be mapped to the key's value in the +Hash+ TODO
-#
-# All can be preceded by additional letters and underscore e.g. %foo_bar_column
-#
-# A database typecast is added to fields ending with double underscore and a valid db data type
-# with optional array dimension
-#
-# - %field__jsonb => adds a ::JSONB typecast to the field
-# - %number_to__text => adds a ::TEXT typecast to the field
-# - %array__text1 => adds a ::TEXT[] TODO
-# - %array__text2 => adds a ::TEXT[][] TODO
-#
-# Quoting
-# - Any value of the standard mixins are quoted with these exceptions
-# - +Array+ are quoted as DB Arrays unless the type cast e.g. __jsonb is given
-# - +Hash+ are quoted as jsonb
-# - When the value responds to :to_sql or is a +Arel::Nodes::SqlLiteral+ its added as raw SQL
-# - +Proc+ are executed with the +QuoteSQL::Quoter+ object as parameter and added as raw SQL
-#
-# Special quoting columns
-# - +String+ or +Symbol+ without a dot  e.g. :firstname => "firstname"
-# - +String+ or +Symbol+ containing a dot e.g. "users.firstname" or => "users"."firstname"
-# - +Array+
-#   - +String+ and +Symbols+ see above
-#   - +Hash+ see below
-# - +Hash+ or within the +Array+
-#   - +Symbol+ value will become the column name e.g. {table: :column} => "table"."column"
-#   - +String+ value will become the expression, the key the AS {result: "SUM(*)"} => SUM(*) AS result
-#   - +Proc+ are executed with the +QuoteSQL::Quoter+ object as parameter and added as raw SQL
-#
 class QuoteSql
+
   DATA_TYPES_RE = %w(
 (?:small|big)(?:int|serial)
 bit bool(?:ean)? box bytea cidr circle date
@@ -119,57 +37,42 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
     @quotes = {}
     @resolved = {}
     @binds = []
+
+    @tables = {}
+    @columns = {}
   end
 
-  attr_reader :sql, :quotes, :original, :binds
-  attr_writer :table_name, :column_names
+  attr_reader :sql, :quotes, :original, :binds, :tables, :columns
 
-  def table_name
-    return @table_name if @table_name
-    return unless table = @quote&.dig(:table)
-    @table_name = table.respond_to?(:table_name) ? table.table_name : table.to_s
+  def table(name = nil)
+    @tables[name&.to_sym].dup
   end
 
-  def column_names
-    return @column_names if @column_names
-    return unless columns = @quote&.dig(:columns)
-    @column_names = if columns[0].is_a? String
-      columns
-    else
-      columns.map(&:name)
-    end.map(&:to_s)
+  def columns(name=nil)
+    @columns[name&.to_sym].dup
   end
 
   # Add quotes keys are symbolized
-  def quote(quotes1 = {}, **quotes2)
-    quotes = @quotes.merge(quotes1, quotes2).transform_keys(&:to_sym)
-    if table = quotes.delete(:table)
-      columns = quotes.delete(:columns) || table.columns
+  def quote(quotes = {})
+    re = /(?:^|(.*)_)(table|columns)$/i
+    quotes.keys.grep(re).each do |quote|
+      _, name, type = quote.to_s.match(re)&.to_a
+      case type
+      when "table"
+        value = quotes.delete quote
+        value = Raw.sql(value) if value.class.to_s == "Arel::Nodes::SqlLiteral"
+        @tables[name&.to_sym] = value
+      when "columns"
+        value = quotes.delete quote
+        value = Raw.sql(value) if value.class.to_s == "Arel::Nodes::SqlLiteral"
+        @columns[name&.to_sym] = value
+      end
     end
-    @quotes = { table:, columns:, **quotes }
+    @quotes.update quotes.transform_keys(&:to_sym)
     self
   end
 
-  class Error < ::RuntimeError
-    def initialize(quote_sql, errors)
-      @object = quote_sql
-      @errors = errors
-    end
 
-    attr_reader :object, :errors
-
-    def sql
-      @object.original.inspect
-    end
-
-    # def inspect
-    #   super + errors.flat_map { [_1.inspect, _1.backtrace] }
-    # end
-
-    def message
-      super + %Q@<QuoteSql #{sql} #{@object.errors.inspect}>@
-    end
-  end
 
   def to_sql
     mixin!
@@ -198,7 +101,6 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
     _exec_query("PREPARE #{name} (#{@binds.join(',')}) AS #{sql}")
     @prepare_name = name
   end
-
 
   # Executes a prepared statement
   # Processes in batches records
@@ -236,7 +138,7 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
     @quotes.to_h do |k, v|
       r = @resolved[k]
       next [nil, nil] if r.nil? or not r.is_a?(Exception)
-      [k, {@quotes[k].inspect => v.inspect, exc: r, backtrace: r.backtrace}]
+      [k, { @quotes[k].inspect => v.inspect, exc: r, backtrace: r.backtrace }]
     end.compact
   end
 
@@ -249,7 +151,11 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
   def key_matches
     @sql.scan(MIXIN_RE).map do |full, *key|
       key = key.compact[0]
-      [full, key, @quotes.key?(key.to_sym)]
+      if m = key.match(/^(.+)#{CASTS}/i)
+        _, key, cast = m.to_a
+      end
+      has_quote = @quotes.key?(key.to_sym) || key.match?(/(table|columns)$/)
+      [full, key, cast, has_quote]
     end
   end
 
@@ -259,22 +165,20 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
     loop do
       s = StringScanner.new(@sql)
       sql = ""
-      key_matches.each do |key_match, key, has_quote|
+      key_matches.each do |key_match, key, cast, has_quote|
         s.scan_until(/(.*?)#{key_match}([a-z0-9_]*)/im)
         matched, pre, post = s.matched, s[1], s[2]
-        if m = key.match(/^bind(\d+)?(?:#{CASTS})?$/im)
-          if m[2].present?
-            cast = m[2].tr("_", " ")
-          end
+        if m = key.match(/^bind(\d+)?/im)
           if m[1].present?
             bind_num = m[1].to_i
             @binds[bind_num - 1] ||= cast
-            raise "cast #{bind_num} already set to #{@binds[bind_num - 1]}" unless @binds[bind_num - 1] == cast
+            raise "bind #{bind_num} already set to #{@binds[bind_num - 1]}" unless @binds[bind_num - 1] == cast
           else
             @binds << cast
             bind_num = @binds.length
           end
-          matched = "#{pre}$#{bind_num}#{post}"
+
+          matched = "#{pre}$#{bind_num}#{"::#{cast}" if cast.present?}#{post}"
         elsif has_quote
           quoted = quoter(key)
           unresolved.delete key
@@ -305,9 +209,25 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
 
   extend Quoting
 
-  def self.test
+  class Raw < String
+    def self.sql(v)
+      if v.class == self
+        v
+      elsif v.respond_to? :to_sql
+        new v.to_sql
+      else
+        new v
+      end
+    end
+  end
+
+  def self.test(which = :all)
     require __dir__ + "/quote_sql/test.rb"
-    Test
+    if which == :all
+      Test.new.all
+    else
+      Test.new.run(which)
+    end
   end
 end
 
