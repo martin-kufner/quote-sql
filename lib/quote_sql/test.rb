@@ -1,59 +1,5 @@
 class QuoteSql::Test
-
-  def all
-    @success = []
-    @fail = []
-    private_methods(false).grep(/^test_/).each { run(_1, true) }
-    @success.each { STDOUT.puts(*_1, nil) }
-    @fail.each { STDOUT.puts(*_1, nil) }
-    puts
-  end
-
-  def run(name, all = false)
-    name = name.to_s.sub(/^test_/, "")
-    rv = ["🧪 #{name}"]
-    @expected = nil
-    @test = send("test_#{name}")
-    if sql.gsub(/\s+/, "")&.downcase&.strip == expected&.gsub(/\s+/, "")&.downcase&.strip
-      tables = @test.tables.to_h { [[_1, "table"].compact.join("_"), _2] }
-      columns = @test.instance_variable_get(:@columns).to_h { [[_1, "columns"].compact.join("_"), _2] }
-      rv += [@test.original, { **tables, **columns, **@test.quotes }.inspect, "🎯 #{expected}", "✅ #{sql}"]
-      @success << rv if @success
-    else
-      rv += [@test.inspect, "🎯 #{expected}", "❌ #{sql}"]
-      @fail << rv if @fail
-    end
-  rescue => exc
-    rv += [@test.inspect, "🎯 #{expected}", "❌ #{sql}", exc.message]
-    @fail << rv if @fail
-  ensure
-    STDOUT.puts(*rv) unless @fail or @success
-  end
-
-  def expected(v = nil)
-    @expected ||= v
-  end
-
-  def sql
-    @test.to_sql
-  end
-
-  class PseudoActiveRecord
-    def self.table_name
-      "pseudo_active_records"
-    end
-
-    def self.column_names
-      %w(id column1 column2)
-    end
-
-    def to_qsl
-      "SELECT * FROM #{self.class.table_name}"
-    end
-  end
-
   private
-
   def test_columns
     expected <<~SQL
       SELECT x, "a", "b", "c", "d"
@@ -189,6 +135,20 @@ class QuoteSql::Test
     "INSERT INTO users (name, color) SELECT * from %x_json".quote_sql(x_casts: {name: "text", color: "text"}, x_json:)
   end
 
+  def test_from_json_bind
+    expected <<~SQL
+        Select * From json_to_recordset($1) AS "x"("a" int,"b" text,"c" boolean)
+    SQL
+    QuoteSQL("Select * From %x_json", x_json: 1, x_casts: {a: "int", b: "text", c: "boolean"})
+  end
+
+  def test_insert_json_bind
+    expected <<~SQL
+         INSERT INTO table ("a","b","c") Select * From json_to_recordset($1) AS "x"("a" int,"b" text,"c" boolean)  
+    SQL
+    QuoteSQL("INSERT INTO table (%x_columns) Select * From %x_json", x_json: 1, x_casts: {a: "int", b: "text", c: "boolean"})
+  end
+
   # def test_q3
   #   expected Arel.sql(<<-SQL)
   #         INSERT INTO "responses" ("id","type","task_id","index","data","parts","value","created_at","updated_at")
@@ -211,5 +171,61 @@ class QuoteSql::Test
   #       ]
   #     )
   # end
+
+
+  public
+
+  def all
+    @success = []
+    @fail = []
+    private_methods(false).grep(/^test_/).each { run(_1, true) }
+    @success.each { STDOUT.puts(*_1, nil) }
+    @fail.each { STDOUT.puts(*_1, nil) }
+    puts
+  end
+
+  def run(name, all = false)
+    name = name.to_s.sub(/^test_/, "")
+    rv = ["🧪 #{name}"]
+    @expected = nil
+    @test = send("test_#{name}")
+    if sql.gsub(/\s+/, "")&.downcase&.strip == expected&.gsub(/\s+/, "")&.downcase&.strip
+      tables = @test.tables.to_h { [[_1, "table"].compact.join("_"), _2] }
+      columns = @test.instance_variable_get(:@columns).to_h { [[_1, "columns"].compact.join("_"), _2] }
+      rv += [
+        "QuoteSql.new(\"#{@test.original}\").quote(#{{**tables, **columns, **@test.quotes }.inspect}).to_sql", "🎯 #{expected}", "✅ #{sql}"]
+      @success << rv if @success
+    else
+      rv += [@test.inspect, "🎯 #{expected}", "❌ #{sql}"]
+      @fail << rv if @fail
+    end
+  rescue => exc
+    rv += [@test.inspect, "🎯 #{expected}", "❌ #{sql}", exc.message]
+    @fail << rv if @fail
+  ensure
+    STDOUT.puts(*rv) unless @fail or @success
+  end
+
+  def expected(v = nil)
+    @expected ||= v
+  end
+
+  def sql
+    @test.to_sql
+  end
+
+  class PseudoActiveRecord
+    def self.table_name
+      "pseudo_active_records"
+    end
+
+    def self.column_names
+      %w(id column1 column2)
+    end
+
+    def to_qsl
+      "SELECT * FROM #{self.class.table_name}"
+    end
+  end
 
 end

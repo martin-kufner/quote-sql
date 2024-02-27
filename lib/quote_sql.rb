@@ -82,14 +82,14 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
     @sql
   end
 
-  def result(binds = [], prepare: false, async: false)
+  def result(*binds, prepare: false, async: false)
     sql = to_sql
-    if binds.present? and sql.scan(/(?<=\$)\d+/).map(&:to_i).max + 1 != binds.length
+    if binds.present? and sql.scan(/(?<=\$)\d+/).map(&:to_i).max != binds.length
       raise ArgumentError, "Wrong number of binds"
     end
     _exec(sql, binds, prepare: false, async: false)
   rescue => exc
-    STDERR.puts exc.sql
+    STDERR.puts exc.inspect, self.inspect
     raise exc
   end
 

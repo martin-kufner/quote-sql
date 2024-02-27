@@ -37,9 +37,13 @@ class QuoteSql
     def ident_columns(name = nil)
       item = columns(name || self.name)
       unless item
-        table = self.table(name || self.name)
-        raise ArgumntError, "No columns or table given" unless table&.respond_to? :column_names
-        item = table.column_names
+        unless item = casts(name || self.name)&.keys
+          if (table = self.table(name || self.name))&.respond_to? :column_names
+            item = table.column_names
+          else
+            raise ArgumntError, "No columns, casts or table given for #{name}" unless table&.respond_to? :column_names
+          end
+        end
       end
       if item.is_a?(Array)
         if item.all? { _1.respond_to?(:name) }
@@ -143,10 +147,14 @@ class QuoteSql
       casts = self.casts(name)
       columns = self.columns(name) || casts&.keys
       column_cast = columns&.map { "#{QuoteSql.quote_column_name(_1)} #{casts&.dig(_1) || "TEXT"}" }
-      item = [item].flatten.compact.as_json.map{_1.slice(*columns.map(&:to_s))}
-      Raw.sql "json_to_recordset('#{item.to_json.gsub(/'/,"''")}') AS #{QuoteSql.quote_column_name name}(#{column_cast.join(',')})"
+      if item.is_a? Integer
+        rv = "$#{item}"
+      else
+        item = [item].flatten.compact.as_json.map { _1.slice(*columns.map(&:to_s)) }
+        rv = "'#{item.to_json.gsub(/'/, "''")}'"
+      end
+      Raw.sql "json_to_recordset(#{rv}) AS #{QuoteSql.quote_column_name name}(#{column_cast.join(',')})"
     end
-
 
     def data_values(item = @quotable)
       item = Array(item).compact
