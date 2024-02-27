@@ -85,12 +85,6 @@ Values are be ordered in sequence of columns. Missing value entries are substitu
   - if the columns option is given (or implicitely by setting table)
     - +Hash+ values are ordered according to the columns option, missing values are replaced by `DEFAULT`
     - +Array+ of +Hash+ multiple record insert
-- `%bind` is replaced with the current bind sequence.
-  Without appended number the first %bind => $1, the second => $2 etc.
-  - %bind\\d+ => $+Integer+ e.g. `%bind7` => $7
-  - `%bind__text` => $1 and it is registered as text - this is used in prepared statements (TO BE IMPLEMENTED)
-  - `%key_bind__text` => $1 and it is registered as text when using +Hash+ in the execute
-    $1 will be mapped to the key's value in the +Hash+ TODO
 
 All can be preceded by additional letters and underscore e.g. `%foo_bar_column`
 
@@ -123,9 +117,24 @@ with optional array dimension
 
 ## Executing
 ### Getting the results
+  `QuoteSql.new('SELECT %x AS a').quote(x: 1).result`
+    => [{:a=>1}]
+
 ### Binds
-  `v = {a: 1, b: "foo", c: true};QuoteSQL(%q{Select * From %x_json}, x_json: 1, x_casts: {a: "int", b: "text", c: "boolean"}).result(v.to_json)`
-  => Select * From json_to_recordset($1) AS "x"("a" int,"b" text,"c" boolean) => [{a: 1, b: "foo", c: true}]
+You can use binds ($1, $2, ...) in the SQL and add arguments to the result call
+  `QuoteSql.new('SELECT $1 AS a').result(1)`  
+
+#### using JSON
+
+    v = {a: 1, b: "foo", c: true}
+    QuoteSQL(%q{SELECT * FROM %x_json}, x_json: 1, x_casts: {a: "int", b: "text", c: "boolean"}).result(v.to_json)
+    
+  => SELECT * FROM json_to_recordset($1) AS "x"("a" int,"b" text,"c" boolean) => [{a: 1, b: "foo", c: true}]
+
+Insert fom json
+  
+    v = {a: 1, b: "foo", c: true}
+    QuoteSql.new("INSERT INTO table (%x_columns) SELECT * FROM %x_json").quote({:x_json=>1}).result(v.to_json)
 
 ## Shortcuts and functions
 - `QuoteSQL("select %abc", abc: 1)` == `QuoteSql.new("select %abc").quote(abc: 1)`
