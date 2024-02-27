@@ -9,7 +9,8 @@ When us use RoR, you can combine queries or get the output with fields other tha
 Please have a look at the *unfinished* documentation below or run `QuoteSql.test` in a Ruby console
 
 If you think QuoteSql is interesting but needs extension, let's chat!
-Also if you have problems using it, just drop me a note.
+
+If you run into problems, drop me a note.
 
 Best Martin
 
