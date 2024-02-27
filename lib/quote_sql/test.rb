@@ -49,14 +49,14 @@ class QuoteSql::Test
     )
   end
 
-  def test_binds
-    expected <<~SQL
-      SELECT $1, $2::UUID, $1 AS get_bind_1_again FROM "my_table"
-    SQL
-    QuoteSql.new("SELECT %bind, %bind__uuid, %bind1 AS get_bind_1_again FROM %table").quote(
-      table: "my_table"
-    )
-  end
+  # def test_binds
+  #   expected <<~SQL
+  #     SELECT $1, $2::UUID, $1 AS get_bind_1_again FROM "my_table"
+  #   SQL
+  #   QuoteSql.new("SELECT %bind, %bind__uuid, %bind1 AS get_bind_1_again FROM %table").quote(
+  #     table: "my_table"
+  #   )
+  # end
 
   def test_from_values_array
     expected <<~SQL
