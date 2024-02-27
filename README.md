@@ -58,15 +58,34 @@ Values are be ordered in sequence of columns. Missing value entries are substitu
       ON CONFLICT ("id") DO NOTHING
       
 ### Columns from a list
-`QuoteSql.new("SELECT %columns").quote(columns: [:a, :"b.c", c: {d: field}]).to_sql`
-  => SELECT "a","b"."c",jsonb_build_object('d', field) AS c 
+`QuoteSql.new("SELECT %columns").quote(columns: [:a, "b.c", d: {e: field}]).to_sql`
+  => SELECT "a","b"."c",jsonb_build_object('e', field) AS d 
 
-`QuoteSql.new("SELECT %columns").quote(columns: [:a, :"b.c", c: {d: field, nil: false}]).to_sql`
-  => SELECT "a","b"."c",jsonb_strip_nulls(jsonb_build_object('d', 1)) AS c 
+`QuoteSql.new("SELECT %columns").quote(columns: [:a, "b.c", d: {e: field, nil: false}]).to_sql`
+  => SELECT "a","b"."c",jsonb_strip_nulls(jsonb_build_object('e', 1)) AS d
+
+## Executing
+### Getting the results
+  `QuoteSql.new('SELECT %x AS a').quote(x: 1).result`
+    => [{:a=>1}]
+
+### Binds
+You can use binds ($1, $2, ...) in the SQL and add arguments to the result call
+  `QuoteSql.new('SELECT $1 AS a').result(1)`  
+
+#### using JSON
+
+    v = {a: 1, b: "foo", c: true}
+    QuoteSQL(%q{SELECT * FROM %x_json}, x_json: 1, x_casts: {a: "int", b: "text", c: "boolean"}).result(v.to_json)
+    
+  => SELECT * FROM json_to_recordset($1) AS "x"("a" int,"b" text,"c" boolean) => [{a: 1, b: "foo", c: true}]
+
+Insert fom json
+  
+    v = {a: 1, b: "foo", c: true}
+    QuoteSql.new("INSERT INTO table (%x_columns) SELECT * FROM %x_json").quote({:x_json=>1}).result(v.to_json)
 
 
-### Execution of a query
-`"Select 1 as abc".quote_sql.result` => [{:abc=>1}]
 
 
 ## Substitution of mixins with quoted values 
@@ -125,26 +144,6 @@ with optional array dimension
     - others see above
     
 
-## Executing
-### Getting the results
-  `QuoteSql.new('SELECT %x AS a').quote(x: 1).result`
-    => [{:a=>1}]
-
-### Binds
-You can use binds ($1, $2, ...) in the SQL and add arguments to the result call
-  `QuoteSql.new('SELECT $1 AS a').result(1)`  
-
-#### using JSON
-
-    v = {a: 1, b: "foo", c: true}
-    QuoteSQL(%q{SELECT * FROM %x_json}, x_json: 1, x_casts: {a: "int", b: "text", c: "boolean"}).result(v.to_json)
-    
-  => SELECT * FROM json_to_recordset($1) AS "x"("a" int,"b" text,"c" boolean) => [{a: 1, b: "foo", c: true}]
-
-Insert fom json
-  
-    v = {a: 1, b: "foo", c: true}
-    QuoteSql.new("INSERT INTO table (%x_columns) SELECT * FROM %x_json").quote({:x_json=>1}).result(v.to_json)
 
 ## Shortcuts and functions
 - `QuoteSQL("select %abc", abc: 1)` == `QuoteSql.new("select %abc").quote(abc: 1)`
