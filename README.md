@@ -9,12 +9,14 @@ I created this library while coding for different projects, and had lots of Here
 
 My strategy is to segment SQL Queries in readable junks, which can be individually tested and then combine their sql to the final query.
 
-QuoteSql is used in production, but is still bleeding edge - and there is not a fully sync between doc and code.
-
 If you think QuoteSql is interesting, let's chat!
 Also if you have problems using it, just drop me a note.
 
 Best Martin
+
+## Caveats & Notes
+- QuoteSql is used in production, but is still bleeding edge - and there is not a fully sync between doc and code.
+- Just for my examples and in the docs, I'm using for Yajl for JSON parsing, and changed in my environments the standard parse output to *symbolized keys*. 
 
 ## Examples
 ### Simple quoting
@@ -118,6 +120,12 @@ with optional array dimension
   - +Symbol+ value will become the column name e.g. {table: :column} => "table"."column"
   - +String+ value will become the expression, the key the AS {result: "SUM(*)"} => SUM(*) AS result
   - +Proc+ are executed with the +QuoteSQL::Quoter+ object as parameter and added as raw SQL
+
+## Executing
+### Getting the results
+### Binds
+  `v = {a: 1, b: "foo", c: true};QuoteSQL(%q{Select * From %x_json}, x_json: 1, x_casts: {a: "int", b: "text", c: "boolean"}).result(v.to_json)`
+  => Select * From json_to_recordset($1) AS "x"("a" int,"b" text,"c" boolean) => [{a: 1, b: "foo", c: true}]
 
 ## Shortcuts and functions
 - `QuoteSQL("select %abc", abc: 1)` == `QuoteSql.new("select %abc").quote(abc: 1)`
