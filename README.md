@@ -1,13 +1,11 @@
 # QuoteSql - Tool to build and run SQL queries easier
-I've built this library as an addition to ActiveRecord and Arel, however you can use it with any sql database and plain Ruby.
-However currently it is just used with PostgreSQL.
-
 Creating SQL queries and proper quoting becomes complicated especially when you need advanced queries.
 
 I created this library while coding for different projects, and had lots of Heredoc SQL queries, which pretty quickly becomes the kind of: 
 > When I wrote these lines of code, just me and God knew what they mean. Now its just God.
 
 My strategy is to segment SQL Queries in readable junks, which can be individually tested and then combine their sql to the final query.
+When us use RoR, you can combine queries or get the output with fields other than `pick` or `pluck`
 
 If you think QuoteSql is interesting, let's chat!
 Also if you have problems using it, just drop me a note.
@@ -15,8 +13,11 @@ Also if you have problems using it, just drop me a note.
 Best Martin
 
 ## Caveats & Notes
+- Currently its just built for Ruby 3, if you need Ruby 2, please contribute
 - QuoteSql is used in production, but is still bleeding edge - and there is not a fully sync between doc and code.
-- Just for my examples and in the docs, I'm using for Yajl for JSON parsing, and changed in my environments the standard parse output to *symbolized keys*. 
+- Just for my examples and in the docs, I'm using for Yajl for JSON parsing, and changed in my environments the standard parse output to *symbolized keys*.
+- I've built this library as an addition to ActiveRecord and Arel, however you can use it with any sql database and plain Ruby.
+- It is currently built for PostgreSQL, if you want other DBs, please contribute your code!
 
 ## Examples
 ### Simple quoting
@@ -33,6 +34,7 @@ Best Martin
 ### Quoting of columns and table from a model - or an object responding to table_name and column_names or columns
 `QuoteSql.new("SELECT %columns FROM %table_name").quote(table: User).to_sql`
   => SELECT "id",firstname","lastname",... FROM "users"
+  
 ### Injecting raw sql in a query
 `QuoteSql.new("SELECT a,b,%raw FROM table").quote(raw: "jsonb_build_object('a', 1)").to_sql`
   => SELECT "a,b,jsonb_build_object('a', 1) FROM table
@@ -146,8 +148,8 @@ If you have pg_format installed you can get the resulting query inspected:
   `QuoteSql.new("select %abc").quote(abc: 1).dsql`
 
 # Test
-Minimal tests you can run by
-`QuoteSql.test.all`
+Currently there are just minimal tests
+run `QuoteSql.test`
 You can find them in /lib/quote_sql/test.rb
 
 ## Installing
@@ -160,8 +162,15 @@ Add this to config/initializers/quote_sql.rb
 
     ActiveSupport.on_load(:active_record) do
       require 'quote_sql'
-      QuoteSql.db_connector = ActiveRecord::Base
+      
+      # if you want to execute from Strings 
+      #   e.g. "select %a".quote_sql(a: 1).result
       String.include QuoteSql::Extension
+
+      # if you use Active Record 
+      QuoteSql.db_connector = ActiveRecord::Base
+      # if you want to execute from a Model 
+      #   e.g. User.select("name, %a").quote_sql(a: 1).result
       ActiveRecord::Relation.include QuoteSql::Extension
     end  
 
