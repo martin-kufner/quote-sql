@@ -3,25 +3,30 @@ Dir.glob(__FILE__.sub(/\.rb$/, "/*.rb")).each { require(_1) unless _1[/(deprecat
 # Tool to build and run SQL queries easier
 class QuoteSql
 
+
   DATA_TYPES_RE = %w(
-(?:small|big)(?:int|serial)
-bit bool(?:ean)? box bytea cidr circle date
+(?>character\\s+varying|bit\\s+varying|character|varbit|varchar|char|bit|interval)(?>\\s*\\(\\s*\\d+\\s*\\))?
+(?>numeric|decimal)(?>\\s*\\(\\s*\\d+\\s*,\\s*\\d+\\s*\\))?
+timestamptz timetz
+time(?>stamp)?(?>\\s*\\(\\s*\\d+\\s*\\))?(?>\\s+with(?>out)?\\s+time\\s+zone)?
+integer
+(?>small|big)(?>int|serial)
+bool(?>ean)? box bytea cidr circle date
 (?:date|int[48]|num|ts(?:tz)?)(?:multi)?range
 macaddr8?
-jsonb?
-ts(?:query|vector)
-float[48] (?:int|serial)[248]?
-double_precision  inet
-integer  line lseg   money   path pg_lsn
-pg_snapshot point polygon real  text timestamptz timetz
-txid_snapshot uuid xml
-(bit_varying|varbit|character|char|character varying|varchar)(_\\(\\d+\\))?
-(numeric|decimal)(_\\(\d+_\d+\\))?
-interval(_(YEAR|MONTH|DAY|HOUR|MINUTE|SECOND|YEAR_TO_MONTH|DAY_TO_HOUR|DAY_TO_MINUTE|DAY_TO_SECOND|HOUR_TO_MINUTE|HOUR_TO_SECOND|MINUTE_TO_SECOND))?(_\\(\d+\\))?
-time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
+ts(?>query|vector)
+float[48]
+(?:int|serial)[248]?
+double\\s+precision
+jsonb json
+ inet
+line lseg   money   path
+pg_lsn pg_snapshot txid_snapshot
+point polygon real text
+uuid xml hstore
     ).join("|")
 
-  CASTS = Regexp.new("__(#{DATA_TYPES_RE})$", "i")
+  CASTS = Regexp.new("::(#{DATA_TYPES_RE})((?:\\s*\\[\\s*\\d?\\s*\\])*)", "i")
 
   def self.conn
     raise ArgumentError, "You need to define a database connection function"
@@ -152,11 +157,8 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
   def key_matches
     @sql.scan(MIXIN_RE).map do |full, *key|
       key = key.compact[0]
-      if m = key.match(/^(.+)#{CASTS}/i)
-        _, key, cast = m.to_a
-      end
       has_quote = @quotes.key?(key.to_sym) || key.match?(/(table|columns)$/)
-      [full, key, cast, has_quote]
+      [full, key, has_quote]
     end
   end
 
@@ -166,27 +168,28 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
     loop do
       s = StringScanner.new(@sql)
       sql = ""
-      key_matches.each do |key_match, key, cast, has_quote|
-        s.scan_until(/(.*?)#{key_match}([a-z0-9_]*)/im)
-        matched, pre, post = s.matched, s[1], s[2]
-        if m = key.match(/^bind(\d+)?/im)
-          if m[1].present?
-            bind_num = m[1].to_i
-            @binds[bind_num - 1] ||= cast
-            raise "bind #{bind_num} already set to #{@binds[bind_num - 1]}" unless @binds[bind_num - 1] == cast
-          else
-            @binds << cast
-            bind_num = @binds.length
-          end
-
-          matched = "#{pre}$#{bind_num}#{"::#{cast}" if cast.present?}#{post}"
-        elsif has_quote
-          quoted = quoter(key)
+      key_matches.each do |key_match, key, has_quote|
+        s.scan_until(/(.*?)#{key_match}(#{CASTS}?)/im)
+        matched, pre, cast = s.matched, s[1], s[2]
+        # if m = key.match(/^bind(\d+)?/im)
+        #   if m[1].present?
+        #     bind_num = m[1].to_i
+        #     @binds[bind_num - 1] ||= cast
+        #     raise "bind #{bind_num} already set to #{@binds[bind_num - 1]}" unless @binds[bind_num - 1] == cast
+        #   else
+        #     @binds << cast
+        #     bind_num = @binds.length
+        #   end
+        #
+        #   matched = "#{pre}$#{bind_num}#{"::#{cast}" if cast.present?}#{post}"
+        # els
+         if has_quote
+          quoted = quoter(key, cast)
           unresolved.delete key
           if (i = quoted.scan MIXIN_RE).present?
             unresolved += i.map(&:last)
           end
-          matched = "#{pre}#{quoted}#{post}"
+          matched = "#{pre}#{quoted}#{cast}"
         end
       rescue TypeError
       ensure
@@ -200,8 +203,8 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
     self
   end
 
-  def quoter(key)
-    quoter = @resolved[key.to_sym] = Quoter.new(self, key, @quotes[key.to_sym])
+  def quoter(key, cast)
+    quoter = @resolved[key.to_sym] = Quoter.new(self, key, cast, @quotes[key.to_sym])
     quoter.to_sql
   rescue TypeError => exc
     @resolved[key.to_sym] = exc
@@ -224,8 +227,11 @@ time(stamp)?(_\\(\d+\\))?(_with(out)?_time_zone)?
 
   def self.test(which = :all)
     require __dir__ + "/quote_sql/test.rb"
-    if which == :all
+    case which
+    when :all
       Test.new.all
+    when :datatype
+      Test.new.datatype
     else
       Test.new.run(which)
     end

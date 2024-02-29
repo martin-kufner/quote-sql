@@ -26,7 +26,7 @@ Best Martin
 `QuoteSql.new("SELECT %field").quote(field: "abc").to_sql`
   => SELECT 'abc'
 
-`QuoteSql.new("SELECT %field__text").quote(field__text: 9).to_sql`
+`QuoteSql.new("SELECT %field::TEXT").quote(field: 9).to_sql`
 => SELECT 9::TEXT
 
 ### Rails models
@@ -58,11 +58,8 @@ Values are be ordered in sequence of columns. Missing value entries are substitu
       ON CONFLICT ("id") DO NOTHING
       
 ### Columns from a list
-`QuoteSql.new("SELECT %columns").quote(columns: [:a, "b.c", d: {e: field}]).to_sql`
-  => SELECT "a","b"."c",jsonb_build_object('e', field) AS d 
-
-`QuoteSql.new("SELECT %columns").quote(columns: [:a, "b.c", d: {e: field, nil: false}]).to_sql`
-  => SELECT "a","b"."c",jsonb_strip_nulls(jsonb_build_object('e', 1)) AS d
+`QuoteSql.new("SELECT %columns FROM %table").quote(table: "foo", columns: [:a, "b", "foo.c", {d: :e}]).to_sql`
+  => SELECT "foo"."a","b"."foo"."c", "foo"."e" AS d
 
 ## Executing
 ### Getting the results
@@ -72,6 +69,7 @@ Values are be ordered in sequence of columns. Missing value entries are substitu
 ### Binds
 You can use binds ($1, $2, ...) in the SQL and add arguments to the result call
   `QuoteSql.new('SELECT $1 AS a').result(1)`  
+    => [{:a=>1}]
 
 #### using JSON
 
@@ -111,10 +109,8 @@ All can be preceded by additional letters and underscore e.g. `%foo_bar_column`
 A database typecast is added to fields ending with double underscore and a valid db data type
 with optional array dimension
 
-- `%field__jsonb` => adds a `::JSONB` typecast to the field
-- `%number_to__text` => adds a `::TEXT` typecast to the field
-- `%array__text1` => adds a `::TEXT[]` (TO BE IMPLEMENTED)
-- `%array__text2` => adds a `::TEXT[][]` (TO BE IMPLEMENTED)
+- `%field::jsonb` => treats the field as jsonb when casted
+- `%array::text[]` => treats an array like a text array, default is JSONB
 
 ### Quoting
 - Any value of the standard mixins are quoted with these exceptions

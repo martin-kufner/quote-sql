@@ -1,12 +1,12 @@
 class QuoteSql
   class Quoter
-    def initialize(qsql, key, quotable)
+    def initialize(qsql, key, cast, quotable)
       @qsql = qsql
-      @key, @quotable = key, quotable
+      @key, @cast, @quotable = key, cast, quotable
       @name = key.sub(/_[^_]+$/, '') if key["_"]
     end
 
-    attr_reader :key, :quotable, :name
+    attr_reader :key, :quotable, :name, :cast
 
     def quotes
       @qsql.quotes
@@ -227,42 +227,65 @@ class QuoteSql
       end
     end
 
-    def cast
-      if m = key.to_s[CASTS]
-        m[2..].sub(CASTS) { _1.tr("_", " ") }
-      end
+    def json?(cast = self.cast)
+      cast.to_s[/jsonb?$/i]
     end
 
-    def json?
-      !!key[/(^|_)(jsonb?)$/]
-    end
-
-    private def _quote(item = @quotable, cast = self.cast)
-      rv = QuoteSql.quote(item)
-      if cast
-        rv << "::#{cast.upcase}"
-        rv << "[]" * rv.depth if rv[/^ARRAY/]
-      end
-      Raw.sql rv
+    private def _quote(item = @quotable)
+      Raw.sql QuoteSql.quote(item)
     end
 
     private def _quote_column_name(name)
       Raw.sql name.scan(/(?:^|")?([^."]+)/).map { QuoteSql.quote_column_name _1 }.join(".")
     end
 
-    def quote(item = @quotable)
-      case item.class.to_s
-      when "Arel::Nodes::SqlLiteral", "QuoteSql::Raw"
-        return Raw.sql(item)
-      when "Array"
-        return _quote(item.to_json) if json?
-        _quote(item)
-      when "Hash"
-        _quote(item.to_json, :jsonb)
-      else
-        return Raw.sql item.to_sql if item.respond_to? :to_sql
-        _quote(item)
+    private def _quote_array(items)
+      rv = items.map do |i|
+        if i.is_a?(Array)
+          _quote_array(i)
+        elsif self.cast[/jsonb?/i]
+          _quote(i.to_json)
+        else
+          quote(i)
+        end
       end
+      "[#{rv.join(",")}]"
+    end
+
+    def quote_hash(item)
+      item.compact! if item.delete(nil) == false
+      case self.cast
+      when /hstore/i
+        _quote(item.map { "#{_1}=>#{_2.nil? ? 'NULL' : _2}"}.join(","))
+      when NilClass,""
+        "#{_quote(item.to_json)}::JSONB"
+      when /jsonb?/i
+        _quote(item.to_json)
+      end
+    end
+
+    def quote(item = @quotable, cast = nil)
+      Raw.sql case item.class.to_s
+              when "Arel::Nodes::SqlLiteral", "QuoteSql::Raw"
+                item
+              when "Array"
+                if json? or self.cast.blank?
+                  rv = _quote(item.to_json)
+                  self.cast.present? ? rv : "#{rv}::JSONB"
+                else
+                  "ARRAY#{_quote_array(item)}"
+                end
+              when "Hash"
+                quote_hash(item)
+              else
+                if item.respond_to? :to_sql
+                  item.to_sql
+                elsif json?
+                  _quote(item.to_json)
+                else
+                  _quote(item)
+                end
+              end
     end
 
     def column_names(item = @quotable)
