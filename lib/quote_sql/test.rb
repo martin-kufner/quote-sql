@@ -133,7 +133,7 @@ class QuoteSql::Test
       INSERT INTO users (name, color) SELECT * from json_to_recordset('[{"name":"auge","color":"#611333"}]') AS "x"("name" text,"color" text)
     SQL
     x_json = { "first_name" => nil, "last_name" => nil, "stripe_id" => nil, "credits" => nil, "avatar" => nil, "name" => "auge", "color" => "#611333", "founder" => nil, "language" => nil, "country" => nil, "data" => {}, "created_at" => "2020-11-19T09:30:18.670Z", "updated_at" => "2020-11-19T09:40:00.063Z" }
-    "INSERT INTO users (name, color) SELECT * from %x_json".quote_sql(x_casts: { name: "text", color: "text" }, x_json:)
+    "INSERT INTO users (%columns) SELECT * from %x_json".quote_sql(x_casts: { name: "text", color: "text" }, x_json:)
   end
 
   def test_from_json_bind

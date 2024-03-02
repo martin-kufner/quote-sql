@@ -51,7 +51,8 @@ uuid xml hstore
   attr_reader :sql, :quotes, :original, :binds, :tables, :columns
 
   def table(name = nil)
-    @tables[name&.to_sym].dup
+    table = @tables[name&.to_sym]
+    table.is_a?(Class) ? table : table.dup
   end
 
   def columns(name = nil)

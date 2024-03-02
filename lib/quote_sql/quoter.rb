@@ -37,7 +37,7 @@ class QuoteSql
     def ident_columns(name = self.name)
       item = columns(name)
       unless item
-        unless item = casts(name)&.keys
+        unless item = casts(name)&.keys&.map(&:to_s)
           if (table = self.table(name))&.respond_to? :column_names
             item = table.column_names
           else
@@ -145,7 +145,7 @@ class QuoteSql
 
     def data_json(item = @quotable)
       casts = self.casts(name)
-      columns = self.columns(name) || casts&.keys
+      columns = self.columns(name) || casts&.keys || self.columns(nil)
       column_cast = columns&.map { "#{QuoteSql.quote_column_name(_1)} #{casts&.dig(_1) || "TEXT"}" }
       if item.is_a? Integer
         rv = "$#{item}"
