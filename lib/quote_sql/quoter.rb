@@ -34,19 +34,19 @@ class QuoteSql
       @qsql.casts(name || self.name)
     end
 
-    def ident_columns(name = nil)
-      item = columns(name || self.name)
+    def ident_columns(name = self.name)
+      item = columns(name)
       unless item
-        unless item = casts(name || self.name)&.keys
-          if (table = self.table(name || self.name))&.respond_to? :column_names
+        unless item = casts(name)&.keys
+          if (table = self.table(name))&.respond_to? :column_names
             item = table.column_names
           else
-            raise ArgumntError, "No columns, casts or table given for #{name}" unless table&.respond_to? :column_names
+            raise ArgumentError, "No columns, casts or table given for #{name}" unless table&.respond_to? :column_names
           end
         end
       end
       if item.is_a?(Array)
-        if item.all? { _1.respond_to?(:name) }
+        if item.all? { not _1.is_a?(Symbol) and not _1.is_a?(String) and _1.respond_to?(:name) }
           item = item.map(&:name)
         end
       end

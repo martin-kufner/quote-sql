@@ -180,6 +180,23 @@ class QuoteSql::Test
     SQL
   end
 
+  def test_columns_with_tables
+    expected <<~SQL
+        SELECT "profiles"."a", "profiles"."b",
+            "relationships"."a", "relationships"."b",
+            relationship_timestamp("relationships".*)
+    SQL
+
+    profile_table = "profiles"
+    relationship_table = "relationships"
+    relationship_columns =  profile_columns = %i[a b]
+
+    <<~SQL.quote_sql(profile_columns:, profile_table:, relationship_columns:, relationship_table:)
+          SELECT %profile_columns, %relationship_columns, 
+            relationship_timestamp(%relationship_table.*)
+    SQL
+  end
+
   # def test_q3
   #   expected Arel.sql(<<-SQL)
   #         INSERT INTO "responses" ("id","type","task_id","index","data","parts","value","created_at","updated_at")
