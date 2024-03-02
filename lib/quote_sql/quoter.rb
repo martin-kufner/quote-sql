@@ -90,9 +90,9 @@ class QuoteSql
       when /(?:^|(.*)_)(ident)$/i
         _ident
       when /(?:^|(.*)_)constraints?$/i
-        quotable
+        quotable.to_s
       when /(?:^|(.*)_)(raw|sql)$/i
-        quotable
+        quotable.to_s
       when /^(.+)_json$/i
         data_json
       when /^(.+)_values$/i

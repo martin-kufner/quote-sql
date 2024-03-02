@@ -19,12 +19,11 @@ class QuoteSql
         self.class.conn
       end
 
-      def _exec_query(sql, binds = [], prepare: false, async: false)
-        conn.exec_query(sql, "SQL", binds, prepare:, async:)
+      def _exec_query(sql, binds = [], **options)
+        conn.exec_query(sql, "SQL", binds, **options)
       end
 
-      def _exec(sql, binds = [], prepare: false, async: false)
-        options = { prepare:, async: }
+      def _exec(sql, binds = [], **options)
         result = _exec_query(sql, binds, **options)
         columns = result.columns.map(&:to_sym)
         result.cast_values.map do |row|

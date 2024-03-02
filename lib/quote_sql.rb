@@ -92,7 +92,7 @@ uuid xml hstore
     if binds.present? and sql.scan(/(?<=\$)\d+/).map(&:to_i).max != binds.length
       raise ArgumentError, "Wrong number of binds"
     end
-    _exec(sql, binds, prepare: false, async: false)
+    _exec(sql, binds, prepare: false)
   rescue => exc
     STDERR.puts exc.inspect, self.inspect
     raise exc
@@ -132,7 +132,7 @@ uuid xml hstore
       if @binds.length != record.length
         next RuntimeError.new("binds are not equal arguments, #{record.inspect}")
       end
-      _exec(sql, record, prepare: false, async: false)
+      _exec(sql, record, prepare: false)
     end
   end
 
