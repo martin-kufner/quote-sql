@@ -3,7 +3,6 @@ Dir.glob(__FILE__.sub(/\.rb$/, "/*.rb")).each { require(_1) unless _1[/(deprecat
 # Tool to build and run SQL queries easier
 class QuoteSql
 
-
   DATA_TYPES_RE = %w(
 (?>character\\s+varying|bit\\s+varying|character|varbit|varchar|char|bit|interval)(?>\\s*\\(\\s*\\d+\\s*\\))?
 (?>numeric|decimal)(?>\\s*\\(\\s*\\d+\\s*,\\s*\\d+\\s*\\))?
@@ -55,17 +54,45 @@ uuid xml hstore
     table.is_a?(Class) ? table : table.dup
   end
 
+  def table=(value)
+    name, table = value
+    name = name&.to_sym
+    @tables[name] = table
+    if table.respond_to?(:columns)
+      @casts[name] = table.columns.to_h do |c|
+        [c.name.to_sym, { sql_type: c.sql_type, default: (c.default || c.default_function rescue nil).present?, virtual: c.type == :virtual }]
+      end if @casts[name].blank?
+    elsif table.respond_to?(:column_names)
+      @casts[name] = table.column_names.to_h { [_1.to_sym, nil] } if @casts[name].blank?
+    end
+  end
+
+  alias tables= table=
+
+  def column=(value)
+    name, column = value
+    name = name&.to_sym
+    @columns[name] = column
+  end
+
+  alias columns= column=
+
+  def cast=(value)
+    name, cast = value
+    name = name&.to_sym
+    raise ArgumentError unless cast.is_a?(Hash)
+    (@casts[name] ||= {}).update(cast.transform_values { _1.is_a?(Hash) ? _1 : { sql_type: _1 } })
+  end
+
+  alias casts= cast=
+
   def columns(name = nil)
-    @columns[name&.to_sym].dup
+    name = name&.to_sym
+    @columns[name] || @casts[name]&.keys&.map(&:to_s)
   end
 
   def casts(name = nil)
-    unless rv = @casts[name&.to_sym]
-      table = table(name) or return
-      return unless table.respond_to? :columns
-      rv = table.columns.to_h { [_1.name.to_sym, _1.sql_type] }
-    end
-    rv
+    @casts[name&.to_sym]
   end
 
   # Add quotes keys are symbolized
@@ -75,7 +102,8 @@ uuid xml hstore
       _, name, type = quote.to_s.match(re)&.to_a
       value = quotes.delete quote
       value = Raw.sql(value) if value.class.to_s == "Arel::Nodes::SqlLiteral"
-      instance_variable_get(:"@#{type.sub(/s*$/,'s')}")[name&.to_sym] = value
+      send(:"#{type}=", [name, value])
+      # instance_variable_get(:"@#{type.sub(/s*$/,'s')}")[name&.to_sym] = value
     end
     @quotes.update quotes.transform_keys(&:to_sym)
     self
@@ -184,7 +212,7 @@ uuid xml hstore
         #
         #   matched = "#{pre}$#{bind_num}#{"::#{cast}" if cast.present?}#{post}"
         # els
-         if has_quote
+        if has_quote
           quoted = quoter(key, cast)
           unresolved.delete key
           if (i = quoted.scan MIXIN_RE).present?
@@ -245,10 +273,4 @@ def QuoteSQL(sql, **options)
 end
 
 QuoteSql.include QuoteSql::Formater
-
-class Array
-  def depth
-    select { _1.is_a?(Array) }.map { _1.depth.to_i + 1 }.max || 1
-  end
-end
 

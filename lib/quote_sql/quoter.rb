@@ -93,10 +93,10 @@ class QuoteSql
         quotable.to_s
       when /(?:^|(.*)_)(raw|sql)$/i
         quotable.to_s
-      when /^(.+)_json$/i
-        data_json
+      when /(?:^|(.*)_)json$/i
+        json_recordset
       when /^(.+)_values$/i
-        data_values
+        values
       when /values$/i
         insert_values
       else
@@ -106,31 +106,7 @@ class QuoteSql
 
     ###############
 
-    private def value(values)
-      # case values.class.to_s
-      # when "QuoteSql::Raw", "Arel::Nodes::SqlLiteral" then rv = values
-      # when "Array"
-      # when "Hash"
-      #   columns = self.columns(name)&.flat_map { _1.is_a?(Hash) ? _1.values : _1 }
-      #   if columns.nil?
-      #     values = values.values
-      #   elsif columns.all? { _1.is_a? Symbol }
-      #     raise ArgumentError, "Columns just Symbols"
-      #   else
-      #     values = columns.map do |column|
-      #       if values.key?(column&.to_sym) or !defaults
-      #         values[column.to_sym]
-      #       elsif column[/^(created|updated)_at$/]
-      #         :current_timestamp
-      #       else
-      #         :default
-      #       end
-      #     end
-      #   end
-      # else
-      #   raise ArgumentError, "value just Array, Hash, QuoteSql::Raw, Arel::Nodes::SqlLiteral"
-      # end
-
+    private def _value(values)
       rv ||= values.map do |i|
         case i
         when :default, :current_timestamp
@@ -143,88 +119,92 @@ class QuoteSql
       Raw.sql "(#{rv.join(",")})"
     end
 
-    def data_json(item = @quotable)
-      casts = self.casts(name)
-      columns = self.columns(name) || casts&.keys || self.columns(nil)
-      column_cast = columns&.map { "#{QuoteSql.quote_column_name(_1)} #{casts&.dig(_1) || "TEXT"}" }
-      if item.is_a? Integer
-        rv = "$#{item}"
-      else
-        item = [item].flatten.compact.as_json.map { _1.slice(*columns.map(&:to_s)) }
-        rv = "'#{item.to_json.gsub(/'/, "''")}'"
-      end
-      Raw.sql "json_to_recordset(#{rv}) AS #{QuoteSql.quote_column_name name}(#{column_cast.join(',')})"
-    end
+    # def data_json(item = @quotable)
+    #   casts = self.casts(name)
+    #   columns = self.columns(name) || casts&.keys
+    #   column_cast = columns&.map { "#{QuoteSql.quote_column_name(_1)} #{casts&.dig(_1) || "TEXT"}" }
+    #   if item.is_a? Integer
+    #     rv = "$#{item}"
+    #   else
+    #     item = [item].flatten.compact.as_json.map { _1.slice(*columns.map(&:to_s)) }
+    #     rv = "'#{item.to_json.gsub(/'/, "''")}'"
+    #   end
+    #   Raw.sql "json_to_recordset(#{rv}) AS #{QuoteSql.quote_column_name name}(#{column_cast.join(',')})"
+    # end
 
-    def data_values(item = @quotable)
-      item = Array(item).compact
-      column_names = columns(name)
-      if column_names.is_a? Hash
-        types = column_names.values.map { "::#{_1.upcase}" if _1 }
-        column_names = column_names.keys
-      end
-      if item.all? { _1.is_a?(Hash) }
-        column_names ||= item.flat_map { _1.keys.sort }.uniq
-        item.map! { _1.fetch_values(*column_names) {} }
-      end
-      if item.all? { _1.is_a?(Array) }
-        length, overflow = item.map { _1.length }.uniq
-        raise ArgumentError, "all values need to have the same length" if overflow
-        column_names ||= (1..length).map { "column#{_1}" }
-        raise ArgumentError, "#{name}_columns and value lengths need to be the same" if column_names.length != length
-        values = item.map { value(_1) }
-      else
-        raise ArgumentError, "Either all type Hash or Array"
-      end
-      if types.present?
-        value = values[0][1..-2].split(/\s*,\s*/)
-        types.each_with_index { value[_2] << _1 || "" }
-        values[0] = "(" + value.join(",") + ")"
-      end
-      # values[0] { _1 << types[_1] || ""}
-      Raw.sql "(VALUES #{values.join(",")}) AS #{_ident name} (#{_ident column_names})"
-    end
-
-    def insert_values(item = @quotable)
-      case item
-      when Arel::Nodes::SqlLiteral
-        item = Raw.sql("(#{item})") unless item[/^\s*\(/] and item[/\)\s*$/]
-        return item
-      when Array
-        item.compact!
-        column_names = (@qsql.quotes[:columns] || @qsql.quotes[:column_names]).dup
-        types = []
-        if column_names.is_a? Hash
-          types = column_names.values.map { "::#{_1.upcase}" if _1 }
-          column_names = column_names.keys
-        elsif column_names.is_a? Array
-          column_names = column_names.map do |column|
-            types << column.respond_to?(:sql_type) ? "::#{column.sql_type}" : nil
-            column.respond_to?(:name) ? column.name : column
-          end
-        end
-
-        if item.all? { _1.is_a?(Hash) }
-          column_names ||= item.flat_map { _1.keys.sort }.uniq
-          item.map! { _1.fetch_values(*column_names) {} }
-        end
-
-        if item.all? { _1.is_a?(Array) }
-          length, overflow = item.map { _1.length }.uniq
-          raise ArgumentError, "all values need to have the same length" if overflow
-          raise ArgumentError, "#{name}_columns and value lengths need to be the same" if column_names and column_names.length != length
-          values = item.map { value(_1) }
-        else
-          raise ArgumentError, "Either all type Hash or Array"
-        end
-        if column_names.present?
-          Raw.sql "(#{_ident column_names}) VALUES #{values.join(",")}"
-        else
-          Raw.sql "VALUES #{values.join(",")}"
-        end
+    def json_recordset(rows = @quotable)
+      case rows
+      when Array, Integer
       when Hash
-        value([item])
+        rows = [rows]
+      else
+        raise ArgumentError, "just Array<Hash> or Hash (for a single value)"
       end
+      casts = self.casts(name)
+      columns = (self.columns(name) || casts&.keys)&.map(&:to_sym)
+      if rows.is_a? Integer
+        rv = "$#{rows}"
+      else
+        rows = rows.compact.map { _1.transform_keys(&:to_sym) }
+        raise ArgumentError, "all values need to be type Hash" if rows.any? { not _1.is_a?(Hash) }
+        columns ||= rows.flat_map { _1.keys.sort }.uniq.map(&:to_sym)
+        rv = "'#{rows.map{ _1.slice(*columns)}.to_json.gsub(/'/, "''")}'"
+      end
+      raise ArgumentError, "table or columns has to be present" if columns.blank?
+      column_cast = columns.map do |column|
+        "#{QuoteSql.quote_column_name column} #{casts&.dig(column, :sql_type) || "TEXT"}"
+      end
+      Raw.sql "json_to_recordset(#{rv}) AS #{QuoteSql.quote_column_name(name || "json")}(#{column_cast.join(',')})"
+    end
+
+    def values(rows = @quotable)
+      if rows.class.to_s[/^(Arel::Nodes::SqlLiteral|QuoteSql::Raw)$/]
+        return Raw.sql((item[/^\s*\(/] and item[/\)\s*$/]) ? rows : "(#{rows})")
+      end
+      case rows
+      when Array
+      when Hash
+        rows = [rows]
+      else
+        raise ArgumentError, "just raw or Array<Hash, Integer> or Hash (for a single value)"
+      end
+      casts = self.casts(name)
+      columns = (self.columns(name) || casts&.keys)&.map(&:to_sym)
+      raise ArgumentError, "all values need to be type Hash" if rows.any? { not _1.is_a?(Hash) }
+      columns ||= rows.flat_map { _1.keys.sort }.uniq.map(&:to_sym)
+      values = rows.each_with_index.map do |row, i|
+        row.transform_keys(&:to_sym)
+        if i == 0 and casts.present?
+          columns.map{ "#{_quote(row[_1])}::#{casts&.dig(_1, :sql_type) || "TEXT"}" }
+        else
+          columns.map{ _quote(row[_1]) }
+        end.then { "(#{_1.join(",")})"}
+      end
+
+      Raw.sql "(VALUES #{values.join(",")}) AS #{QuoteSql.quote_column_name(name || "values")} (#{columns.map{QuoteSql.quote_column_name(_1)}.join(",")})"
+    end
+
+
+    def insert_values(rows = @quotable)
+      if rows.class.to_s[/^(Arel::Nodes::SqlLiteral|QuoteSql::Raw)$/]
+        return Raw.sql((item[/^\s*\(/] and item[/\)\s*$/]) ? rows : "(#{rows})")
+      end
+      case rows
+      when Array
+      when Hash
+        rows = [rows]
+      else
+        raise ArgumentError, "just raw or Array<Hash> or Hash (for a single value)"
+      end
+
+      rows = rows.compact.map { _1.transform_keys(&:to_sym) }
+      raise ArgumentError, "all values need to be type Hash" if rows.any? { not _1.is_a?(Hash) }
+      casts = self.casts(name)
+      columns = (self.columns(name) || casts&.keys || rows.flat_map { _1.keys.sort }.uniq).map(&:to_sym)
+      raise ArgumentError, "table or columns has to be present" if columns.blank?
+      columns -= (casts&.select { _2[:virtual] }&.keys || [])
+      values = rows.map { _value(_1.fetch_values(*columns) { :default }) }
+      Raw.sql("(#{columns.map { QuoteSql.quote_column_name _1 }.join(",")}) VALUES #{values.join(",")}")
     end
 
     def json?(cast = self.cast)
@@ -256,8 +236,8 @@ class QuoteSql
       item.compact! if item.delete(nil) == false
       case self.cast
       when /hstore/i
-        _quote(item.map { "#{_1}=>#{_2.nil? ? 'NULL' : _2}"}.join(","))
-      when NilClass,""
+        _quote(item.map { "#{_1}=>#{_2.nil? ? 'NULL' : _2}" }.join(","))
+      when NilClass, ""
         "#{_quote(item.to_json)}::JSONB"
       when /jsonb?/i
         _quote(item.to_json)

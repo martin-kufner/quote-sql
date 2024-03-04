@@ -50,21 +50,45 @@ class QuoteSql::Test
     )
   end
 
-  # def test_binds
-  #   expected <<~SQL
-  #     SELECT $1, $2::UUID, $1 AS get_bind_1_again FROM "my_table"
-  #   SQL
-  #   QuoteSql.new("SELECT %bind, %bind__uuid, %bind1 AS get_bind_1_again FROM %table").quote(
-  #     table: "my_table"
-  #   )
-  # end
-
-  def test_from_values_array
+  def test_values_hash_active_record
+    table = create_active_record_class("tasks") do |t|
+      t.text :name
+      t.integer :n1, default: 1, null: false
+      t.virtual :v1, type: :boolean, stored: true, as: "FALSE"
+      t.timestamps
+    end
+    updated_at = Date.new(2024,1,1)
     expected <<~SQL
-      SELECT * FROM (VALUES ('a',1,TRUE,NULL)) AS "x" ("column1","column2","column3","column4")
+        INSERT INTO "tasks" ("id", "name", "n1", "created_at", "updated_at") VALUES (DEFAULT, 'Task1', 1, DEFAULT, DEFAULT), (DEFAULT, 'Task2', DEFAULT, DEFAULT, '2024-01-01')
     SQL
-    "SELECT * FROM %x_values".quote_sql(x_values: [['a', 1, true, nil]])
+    values = [
+                {n1: 1, name: "Task1"},
+                {name: "Task2", updated_at: }
+    ]
+    QuoteSql.new(<<~SQL).quote(table:, values:)
+        INSERT INTO %table %values
+    SQL
   end
+
+  def test_values_hash_active_record_select_columns
+    table = create_active_record_class("tasks") do |t|
+      t.text :name
+      t.integer :n1, default: 1, null: false
+      t.virtual :v1, type: :boolean, stored: true, as: "FALSE"
+      t.timestamps
+    end
+    expected <<~SQL
+        INSERT INTO "tasks" ("name") VALUES ('Task1'), ('Task2')
+    SQL
+    values = [
+      {n1: 1, name: "Task1"},
+      {name: "Task2", id: "12345" }
+    ]
+    QuoteSql.new(<<~SQL).quote(table:, values:, columns: %i[name])
+        INSERT INTO %table %values
+    SQL
+  end
+
 
   def test_from_values_hash_no_columns
     expected <<~SQL
@@ -94,7 +118,7 @@ class QuoteSql::Test
                   ) AS "x" ("a", "b", "c", "d")
     SQL
     "SELECT * FROM %x_values".quote_sql(
-      x_columns: {
+      x_casts: {
         a: "text",
         b: "integer",
         c: "boolean",
@@ -107,12 +131,6 @@ class QuoteSql::Test
       ])
   end
 
-  def test_insert_values_array
-    expected <<~SQL
-      INSERT INTO x VALUES ('a', 1, true, NULL)
-    SQL
-    "INSERT INTO x %values".quote_sql(values: [['a', 1, true, nil]])
-  end
 
   def test_insert_values_hash
     expected <<~SQL
@@ -130,10 +148,10 @@ class QuoteSql::Test
 
   def test_json_insert
     expected <<~SQL
-      INSERT INTO users (name, color) SELECT * from json_to_recordset('[{"name":"auge","color":"#611333"}]') AS "x"("name" text,"color" text)
+      INSERT INTO users ("name", "color") SELECT * from json_to_recordset('[{"name":"auge","color":"#611333"}]') AS "json"("name" text,"color" text)
     SQL
-    x_json = { "first_name" => nil, "last_name" => nil, "stripe_id" => nil, "credits" => nil, "avatar" => nil, "name" => "auge", "color" => "#611333", "founder" => nil, "language" => nil, "country" => nil, "data" => {}, "created_at" => "2020-11-19T09:30:18.670Z", "updated_at" => "2020-11-19T09:40:00.063Z" }
-    "INSERT INTO users (%columns) SELECT * from %x_json".quote_sql(x_casts: { name: "text", color: "text" }, x_json:)
+    json = { "first_name" => nil, "last_name" => nil, "stripe_id" => nil, "credits" => nil, "avatar" => nil, "name" => "auge", "color" => "#611333", "founder" => nil, "language" => nil, "country" => nil, "data" => {}, "created_at" => "2020-11-19T09:30:18.670Z", "updated_at" => "2020-11-19T09:40:00.063Z" }
+    "INSERT INTO users (%columns) SELECT * from %json".quote_sql(columns: %i[name color], json:)
   end
 
   def test_from_json_bind
@@ -164,9 +182,9 @@ class QuoteSql::Test
         ARRAY[[1,2,3],[1,2,3]]::INT[][]
     SQL
     array1 = array2 = array3 = ["cde", nil, "fgh"]
-    array4 = [[1,2,3], [1,2,3]]
+    array4 = [[1, 2, 3], [1, 2, 3]]
     hash = { foo: "bar", "go": 1, strip_null: nil }
-    QuoteSQL(<<~SQL, field1: 'abc', array1:, array2:, array3:, array4:, hash: ,not_compact: hash, compact: hash.merge(nil => false))
+    QuoteSQL(<<~SQL, field1: 'abc', array1:, array2:, array3:, array4:, hash:, not_compact: hash, compact: hash.merge(nil => false))
       SELECT 
         %field1::TEXT, 
         %field1::JSON,
@@ -182,18 +200,33 @@ class QuoteSql::Test
 
   def test_columns_with_tables
     expected <<~SQL
-        SELECT "profiles"."a", "profiles"."b",
-            "relationships"."a", "relationships"."b",
-            relationship_timestamp("relationships".*)
+      SELECT "profiles"."a", "profiles"."b",
+          "relationships"."a", "relationships"."b",
+          relationship_timestamp("relationships".*)
     SQL
 
     profile_table = "profiles"
     relationship_table = "relationships"
-    relationship_columns =  profile_columns = %i[a b]
+    relationship_columns = profile_columns = %i[a b]
 
     <<~SQL.quote_sql(profile_columns:, profile_table:, relationship_columns:, relationship_table:)
-          SELECT %profile_columns, %relationship_columns, 
-            relationship_timestamp(%relationship_table.*)
+      SELECT %profile_columns, %relationship_columns, 
+        relationship_timestamp(%relationship_table.*)
+    SQL
+  end
+
+  def test_active_record
+    table = create_active_record_class("users") do |t|
+      t.text :first_name
+      t.integer :n1, default: 1, null: false
+      t.virtual :v1, type: :boolean, stored: true, as: "FALSE"
+      t.timestamps default: "CURRENT_TIMESTAMP", null: false
+    end
+    expected <<~SQL
+      SELECT "id", "first_name", "n1", "v1", "created_at", "updated_at" FROM "users"
+    SQL
+    <<~SQL.quote_sql(table:)
+        SELECT %columns FROM %table
     SQL
   end
 
@@ -234,18 +267,20 @@ class QuoteSql::Test
   def run(name, all = false)
     name = name.to_s.sub(/^test_/, "")
     rv = ["🧪 #{name}"]
+    puts(*rv)
     @expected = nil
     @test = send("test_#{name}")
     if sql.gsub(/\s+/, "")&.downcase&.strip == expected&.gsub(/\s+/, "")&.downcase&.strip
-      tables = @test.tables.to_h { [[_1, "table"].compact.join("_"), _2] }
-      columns = @test.instance_variable_get(:@columns).to_h { [[_1, "columns"].compact.join("_"), _2] }
-      rv += [
-        "QuoteSql.new(\"#{@test.original}\").quote(#{{ **tables, **columns, **@test.quotes }.inspect}).to_sql", "🎯 #{expected}", "✅ #{sql}"]
+      # tables = @test.tables.to_h { [[_1, "table"].compact.join("_"), _2] }
+      # columns = @test.instance_variable_get(:@columns).to_h { [[_1, "columns"].compact.join("_"), _2] }
+      #"QuoteSql.new(\"#{@test.original}\").quote(#{{ **tables, **columns, **@test.quotes }.inspect}).to_sql",
+        rv += ["🎯 #{expected}", "✅ #{sql}"]
+
       @success << rv if @success
     else
       rv += [@test.inspect, "🎯 #{expected}", "❌ #{sql}"]
-      rv << sql.gsub(/\s+/, "")&.downcase&.strip
-      rv << expected&.gsub(/\s+/, "")&.downcase&.strip
+      rv << "🎯 " + expected&.gsub(/\s+/, "")&.downcase&.strip
+      rv << "❌ " + sql.gsub(/\s+/, "")&.downcase&.strip
       @fail << rv if @fail
     end
   rescue => exc
@@ -263,19 +298,64 @@ class QuoteSql::Test
     @test.to_sql
   end
 
-  class PseudoActiveRecord
-    def self.table_name
-      "pseudo_active_records"
+  class PseudoActiveRecordKlass
+    class Column
+      def initialize(name, type, **options)
+        @name = name.to_s
+        @type = type
+        @null = options[:null]
+        type = options[:type] if @type == :virtual
+        @sql_type = DATATYPES[/^#{type}$/]
+        unless @type == :virtual or options[:default].nil?
+         @default = options[:default]
+        end
+      end
+
+      attr_reader :name, :type, :sql_type, :null, :default, :default_function
+
+      def default?
+        ! (@default || @default_function).nil?
+      end
+    end
+    class Columns
+      def initialize(&block)
+        @rv = []
+        block.call(self)
+      end
+
+      def to_a
+        @rv
+      end
+
+      def timestamps(**options)
+        @rv << Column.new( :created_at, :timestamp, null: false, **options)
+        @rv << Column.new( :updated_at, :timestamp, null: false, **options)
+      end
+
+      def method_missing(type, name, *args, **options)
+        @rv << Column.new(name, type, *args, **options)
+      end
     end
 
-    def self.column_names
-      %w(id column1 column2)
+    def initialize(table_name, id: :uuid, &block)
+      @table_name = table_name
+      @columns = Columns.new(&block).to_a
+      unless id.nil? or id == false
+        @columns.unshift(Column.new("id", *[id], null: false, default: "gen_random_uuid()"))
+      end
     end
 
-    def to_qsl
-      "SELECT * FROM #{self.class.table_name}"
+    attr_reader :table_name, :columns
+
+    def column_names
+      @columns.map { _1.name }
     end
   end
+
+  def create_active_record_class(table_name, **options, &block)
+     PseudoActiveRecordKlass.new(table_name, **options, &block)
+  end
+
 
   def datatype
     errors = {}
@@ -288,11 +368,11 @@ class QuoteSql::Test
 
       m = "jgj hsgjhsgfjh ag %field::#{l} asldfalskjdfl".match(QuoteSql::CASTS)
       if m.present? and l == m[1]
-          success << line
-        else
-          errors[line] = m&.to_a
+        success << line
+      else
+        errors[line] = m&.to_a
       end
-      line = line + "[]"*(rand(3) + 1)
+      line = line + "[]" * (rand(3) + 1)
       m = "jgj hsgjhsgfjh ag %field::#{line} asldfalskjdfl".match(QuoteSql::CASTS)
       if m.present? and line == m[1] + m[2]
         success << line

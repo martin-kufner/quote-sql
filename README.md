@@ -54,7 +54,9 @@ Values are be ordered in sequence of columns. Missing value entries are substitu
       {lastname: "Schultz", firstname: "herbert"}
     ], constraint: :id).to_sql`
   => INSERT INTO "users" ("id", "firstname", "lastname", "created_at")
-      VALUES (1, 'Albert', 'Müller', CURRENT_TIMESTAMP), (DEFAULT, 'herbert', 'Schultz', CURRENT_TIMESTAMP)
+      VALUES
+        (1, 'Albert', 'Müller', DEFAULT), 
+        (DEFAULT, 'herbert', 'Schultz', DEFAULT)
       ON CONFLICT ("id") DO NOTHING
       
 ### Columns from a list
@@ -81,7 +83,7 @@ You can use binds ($1, $2, ...) in the SQL and add arguments to the result call
 Insert fom json
   
     v = {a: 1, b: "foo", c: true}
-    QuoteSql.new("INSERT INTO table (%x_columns) SELECT * FROM %x_json").quote({:x_json=>1}).result(v.to_json)
+    QuoteSql.new("INSERT INTO table (%columns) SELECT * FROM %json").quote({:json=>1}).result(v.to_json)
 
 
 
