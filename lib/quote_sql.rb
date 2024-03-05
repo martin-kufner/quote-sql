@@ -97,7 +97,9 @@ uuid xml hstore
 
   # Add quotes keys are symbolized
   def quote(quotes = {})
+    quotes = quotes.transform_keys(&:to_sym)
     re = /(?:^|(.*)_)(table|columns|casts)$/i
+    (table_name = quotes[:table_name].presence) and (@tables[:table] ||= table_name)
     quotes.keys.grep(re).each do |quote|
       _, name, type = quote.to_s.match(re)&.to_a
       value = quotes.delete quote
@@ -105,7 +107,7 @@ uuid xml hstore
       send(:"#{type}=", [name, value])
       # instance_variable_get(:"@#{type.sub(/s*$/,'s')}")[name&.to_sym] = value
     end
-    @quotes.update quotes.transform_keys(&:to_sym)
+    @quotes.update quotes
     self
   end
 

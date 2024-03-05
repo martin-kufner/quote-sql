@@ -83,17 +83,19 @@ class QuoteSql
     def to_sql
       return @quotable.call(self) if @quotable.is_a? Proc
       case key.to_s
-      when /(?:^|(.*)_)table$/i
+      when /(?:^|(.+)_)table_name$/i
         ident_table
-      when /(?:^|(.*)_)columns$/i
+      when /(?:^|(.+)_)table$/i
+        ident_table
+      when /(?:^|(.+)_)columns$/i
         ident_columns
-      when /(?:^|(.*)_)(ident)$/i
+      when /(?:^|(.+)_)(ident|column)$/i
         _ident
-      when /(?:^|(.*)_)constraints?$/i
+      when /(?:^|(.+)_)constraints?$/i
         quotable.to_s
-      when /(?:^|(.*)_)(raw|sql)$/i
+      when /(?:^|(.+)_)(raw|sql)$/i
         quotable.to_s
-      when /(?:^|(.*)_)json$/i
+      when /(?:^|(.+)_)json$/i
         json_recordset
       when /^(.+)_values$/i
         values
