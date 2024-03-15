@@ -220,7 +220,7 @@ class QuoteSql::Test
       t.text :first_name
       t.integer :n1, default: 1, null: false
       t.virtual :v1, type: :boolean, stored: true, as: "FALSE"
-      t.timestamps default: "CURRENT_TIMESTAMP", null: false
+      t.timestamps default: -> {"CURRENT_TIMESTAMP"} , null: false
     end
     expected <<~SQL
       SELECT "id", "first_name", "n1", "v1", "created_at", "updated_at" FROM "users"
