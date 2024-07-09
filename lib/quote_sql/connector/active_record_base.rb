@@ -11,7 +11,11 @@ class QuoteSql
         end
 
         def quote(name)
-          conn.quote(name)
+          if name.is_a? Array
+            "ARRAY[#{name.map{conn.quote(_1)}.join(",")}]"
+          else
+            conn.quote(name)
+          end
         end
       end
 
