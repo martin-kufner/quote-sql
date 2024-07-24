@@ -118,15 +118,43 @@ uuid xml hstore
     @sql
   end
 
-  def result(*binds, prepare: false, async: false)
+  def returning(returning)
+    @returning = returning
+    self
+  end
+
+  def result(*binds, prepare: false, async: false, &block)
     sql = to_sql
     if binds.present? and sql.scan(/(?<=\$)\d+/).map(&:to_i).max != binds.length
       raise ArgumentError, "Wrong number of binds"
     end
-    _exec(sql, binds, prepare: false)
+    result = _exec(sql, binds, prepare: false)
+    result = result.map(&block).compact if block_given?
+    @returning ? process_returning(result) : result
   rescue => exc
     STDERR.puts exc.inspect, self.inspect
     raise exc
+  end
+
+  private def process_returning(result)
+    case @returning
+    when NilClass
+      result
+    when ActiveRecord::Relation
+      @returning.send(:instantiate_records, result)
+    when Proc
+      @returning.call result
+    when Class
+      if @returning < ActiveRecord::Base
+        @returning.send(:relation).send(:instantiate_records, result)
+      elsif @returning.respond_to? :instantiate_records
+        @returning.instantiate_records(result)
+      else
+        result.map { @returning.new _1 }
+      end
+    else
+      raise "Returning not defined"
+    end
   end
 
   alias exec result

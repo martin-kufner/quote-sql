@@ -179,7 +179,7 @@ Add this to config/initializers/quote_sql.rb
       ActiveRecord::Relation.include QuoteSql::Extension
     end  
 
-## Todos
+## FIXMEs
 - Functionalities not yet used in my production might not work
 - More documentation
 - Tests missing
