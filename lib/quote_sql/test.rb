@@ -61,12 +61,12 @@ class QuoteSql::Test
     expected <<~SQL
         INSERT INTO "tasks" ("id", "name", "n1", "created_at", "updated_at") VALUES (DEFAULT, 'Task1', 1, DEFAULT, DEFAULT), (DEFAULT, 'Task2', DEFAULT, DEFAULT, '2024-01-01')
     SQL
-    values = [
+    insert_values = [
                 {n1: 1, name: "Task1"},
                 {name: "Task2", updated_at: }
     ]
-    QuoteSql.new(<<~SQL).quote(table:, values:)
-        INSERT INTO %table %values
+    QuoteSql.new(<<~SQL).quote(table:, insert_values:)
+        INSERT INTO %table %insert_values
     SQL
   end
 
@@ -80,12 +80,12 @@ class QuoteSql::Test
     expected <<~SQL
         INSERT INTO "tasks" ("name") VALUES ('Task1'), ('Task2')
     SQL
-    values = [
+    insert_values = [
       {n1: 1, name: "Task1"},
       {name: "Task2", id: "12345" }
     ]
-    QuoteSql.new(<<~SQL).quote(table:, values:, columns: %i[name])
-        INSERT INTO %table %values
+    QuoteSql.new(<<~SQL).quote(table:, insert_values:, columns: %i[name])
+        INSERT INTO %table %insert_values
     SQL
   end
 
@@ -136,7 +136,7 @@ class QuoteSql::Test
     expected <<~SQL
       INSERT INTO x ("a", "b", "c", "d") VALUES ('a', 1, true, NULL)
     SQL
-    "INSERT INTO x %values".quote_sql(values: [{ a: 'a', b: 1, c: true, d: nil }])
+    "INSERT INTO x %insert_values".quote_sql(insert_values: [{ a: 'a', b: 1, c: true, d: nil }])
   end
 
   def test_from_json
@@ -215,6 +215,15 @@ class QuoteSql::Test
     SQL
   end
 
+  def test_bulk_update
+    UPDATE "slot_responses"
+    SET
+    FROM (VALUES (FALSE,1),(FALSE,1)) AS "v" ("active","response_id")
+    WHERE "slot_responses".response_id = v.response_id
+  end
+
+
+
   def test_active_record
     table = create_active_record_class("users") do |t|
       t.text :first_name
@@ -240,12 +249,12 @@ class QuoteSql::Test
   #     SQL
   #
   #   QuoteSql.new(<<-SQL).
-  #       INSERT INTO %table (%columns) VALUES %values
+  #       INSERT INTO %table (%columns) VALUES %insert_values
   #         ON CONFLICT (responses_task_id_index_unique) DO NOTHING;
   #     SQL
   #     quote(
   #       table: Response,
-  #       values: [
+  #       insert_values: [
   #         [nil, true, "A", [5, 5], { a: 1 }],
   #         [1, false, "B", [], { a: 2 }],
   #         [2, nil, "c", [1, 2, 3], { a: 3 }]
