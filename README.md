@@ -47,9 +47,9 @@ Best Martin
   => SELECT firstname, lastname FROM (SELECT firstname, lastname FROM users where id = 3)
 
 ### Insert of values quoted and sorted with columns
-Values are be ordered in sequence of columns. Missing value entries are substitured with DEFAULT.
-`QuoteSql.new("INSERT INTO %table (%columns) VALUES %values ON CONFLICT (%constraint) DO NOTHING").
-    quote(table: User, values: [
+Values are be ordered in sequence of columns. Missing value entries are substituted with DEFAULT.
+`QuoteSql.new("INSERT INTO %table %insert_values ON CONFLICT (%constraint) DO NOTHING").
+    quote(table: User, insert_values: [
       {firstname: "Albert", id: 1, lastname: "Müller"},
       {lastname: "Schultz", firstname: "herbert"}
     ], constraint: :id).to_sql`
@@ -101,7 +101,7 @@ Insert fom json
 - `%casts` +Hash+ keys: column name, values: Cast e.g. "text", "integer"
 - `%ident` | `%constraint` | `%constraints` quoting for database columns
 - `%raw` | `%sql` inserting raw SQL
-- `%values` creates the value section for INSERT `INSERT INTO foo (a,b) %values`
+- `%insert_values` creates the value section for INSERT `INSERT INTO foo (a,b) %insert_values`
 - `%x_values` creates the value secion for FROM `SELECT column1, column2, column3 FROM %x_values`
 - `%x_json` creates `json_for_recordset(JSON) x (CASTS)`. "x" can be any other identifier, you need to define the casts e.g. `quotes(x_json: {a: "a", b: 1}, x_casts: {a: :text, b: :integer)`
 

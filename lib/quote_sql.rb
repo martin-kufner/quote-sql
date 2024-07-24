@@ -86,13 +86,17 @@ uuid xml hstore
 
   alias casts= cast=
 
-  def columns(name = nil)
+  def columns(name = nil, value=nil)
     name = name&.to_sym
-    @columns[name] || @casts[name]&.keys&.map(&:to_s)
+    if name.present? and value.present?
+      @columns[name] = value
+    else
+      @columns[name] || @casts[name]&.keys&.map(&:to_s)
+    end
   end
 
   def casts(name = nil)
-    @casts[name&.to_sym]
+    @casts.fetch(name&.to_sym) { @casts[nil] }
   end
 
   # Add quotes keys are symbolized

@@ -26,12 +26,31 @@ class QuoteSql
       end.join(","))
     end
 
-    def columns(name = nil)
-      @qsql.columns(name || self.name)
+    def columns(name = nil, value=nil)
+      @qsql.columns(name || self.name, value)
     end
 
     def casts(name = nil)
       @qsql.casts(name || self.name)
+    end
+
+    def ident_tablecolumn(name = self.name)
+      item = columns(name)
+      unless item
+        unless item = casts(name)&.keys&.map(&:to_s)
+          if (table = self.table(name))&.respond_to? :column_names
+            item = table.column_names
+          else
+            raise ArgumentError, "No columns, casts or table given for #{name}" unless table&.respond_to? :column_names
+          end
+        end
+      end
+      if item.is_a?(Array)
+        if item.all? { not _1.is_a?(Symbol) and not _1.is_a?(String) and _1.respond_to?(:name) }
+          item = item.map(&:name)
+        end
+      end
+      Raw.sql item.map { "#{_quote_ident(name)}.#{_quote_ident(_1)}" }.join(",")
     end
 
     def ident_columns(name = self.name)
@@ -87,6 +106,8 @@ class QuoteSql
         ident_table
       when /(?:^|(.+)_)table$/i
         ident_table
+      when /(?:^|(.+)_)tablecolumns$/i
+        ident_tablecolumn
       when /(?:^|(.+)_)columns$/i
         ident_columns
       when /(?:^|(.+)_)(ident|column)$/i
@@ -97,10 +118,10 @@ class QuoteSql
         quotable.to_s
       when /(?:^|(.+)_)json$/i
         json_recordset
-      when /^(.+)_values$/i
-        values
-      when /values$/i
+      when /insert_values$/i
         insert_values
+      when /^(?:(.+)_)?values$/i
+        values
       else
         quote
       end
@@ -170,20 +191,24 @@ class QuoteSql
       else
         raise ArgumentError, "just raw or Array<Hash, Integer> or Hash (for a single value)"
       end
-      casts = self.casts(name)
-      columns = (self.columns(name) || casts&.keys)&.map(&:to_sym)
+      casts = self.casts(name) || self.casts
       raise ArgumentError, "all values need to be type Hash" if rows.any? { not _1.is_a?(Hash) }
-      columns ||= rows.flat_map { _1.keys.sort }.uniq.map(&:to_sym)
+      columns = (self.columns(name) || casts&.keys)&.map { _1.to_s.to_sym }
+                         columns = columns & rows.flat_map { _1.keys.sort }.uniq.map(&:to_sym)
+      self.columns(name, columns)
       values = rows.each_with_index.map do |row, i|
-        row.transform_keys(&:to_sym)
+        row.transform_keys!(&:to_sym)
         if i == 0 and casts.present?
           columns.map{ "#{_quote(row[_1])}::#{casts&.dig(_1, :sql_type) || "TEXT"}" }
         else
           columns.map{ _quote(row[_1]) }
         end.then { "(#{_1.join(",")})"}
       end
-
-      Raw.sql "(VALUES #{values.join(",")}) AS #{QuoteSql.quote_column_name(name || "values")} (#{columns.map{QuoteSql.quote_column_name(_1)}.join(",")})"
+      rv = "VALUES #{values.join(",")}"
+      unless name.nil?
+        rv = "(#{rv}) AS #{QuoteSql.quote_column_name(name || "values")} (#{columns.map{QuoteSql.quote_column_name(_1)}.join(",")})"
+      end
+      Raw.sql rv
     end
 
 
