@@ -132,12 +132,41 @@ uuid xml hstore
     if binds.present? and sql.scan(/(?<=\$)\d+/).map(&:to_i).max != binds.length
       raise ArgumentError, "Wrong number of binds"
     end
-    result = _exec(sql, binds, prepare: false)
-    result = result.map(&block).compact if block_given?
-    @returning ? process_returning(result) : result
+
+    add_returning(sql) if @returning.present? and not sql.match? /\bRETURNING\b/i
+    if @returning
+      process_returning _exec_query(sql, binds, prepare: false)
+    else
+      result = _exec(sql, binds, prepare: false)
+      result = result.map(&block).compact if block_given?
+      result
+    end
+
   rescue => exc
     STDERR.puts exc.inspect, self.inspect
     raise exc
+  end
+
+  private def add_returning(sql)
+    quote = -> columns do
+      if columns.respond_to? :column_names
+        c = columns.column_names.map{ "#{columns.table_name}.#{_1}" }
+      else
+        c = columns
+      end
+      " RETURNING #{c.join(",")}"
+    end
+    case @returning
+    when Array, String, Symbol
+      sql << quote.call(Array(@returning))
+    when ActiveRecord::Relation
+      sql << (@returning.select_values.present? ? quote.call(@returning.select_values) : quote.call(@returning.klass))
+    when Class
+      if @returning.respond_to? :column_names
+        sql << quote.call(@returning)
+      end
+    end
+
   end
 
   private def process_returning(result)

@@ -216,10 +216,10 @@ class QuoteSql::Test
   end
 
   def test_bulk_update
-    UPDATE "slot_responses"
-    SET
-    FROM (VALUES (FALSE,1),(FALSE,1)) AS "v" ("active","response_id")
-    WHERE "slot_responses".response_id = v.response_id
+    # UPDATE "slot_responses"
+    # SET
+    # FROM (VALUES (FALSE,1),(FALSE,1)) AS "v" ("active","response_id")
+    # WHERE "slot_responses".response_id = v.response_id
   end
 
 
