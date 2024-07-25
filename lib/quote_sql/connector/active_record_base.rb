@@ -13,6 +13,8 @@ class QuoteSql
         def quote(name)
           if name.is_a? Array
             "ARRAY[#{name.map{conn.quote(_1)}.join(",")}]"
+          elsif name.is_a? Hash
+            conn.quote(name.to_json)
           else
             conn.quote(name)
           end

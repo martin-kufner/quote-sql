@@ -117,9 +117,14 @@ uuid xml hstore
 
   def to_sql
     mixin!
-    raise Error.new(self, errors) if errors?
-    return Arel.sql @sql if defined? Arel
-    @sql
+    if errors?
+      pp errors
+      raise Error.new(self, errors)
+    end
+    sql = @sql.dup
+    add_returning(sql) if @returning.present? and not sql.match? /\bRETURNING\b/i
+    return Arel.sql sql if defined? Arel
+    sql
   end
 
   def returning(returning)
@@ -127,21 +132,29 @@ uuid xml hstore
     self
   end
 
-  def result(*binds, prepare: false, async: false, &block)
+  def result(*binds, prepare: false, async: false, as: @returning, &block)
     sql = to_sql
     if binds.present? and sql.scan(/(?<=\$)\d+/).map(&:to_i).max != binds.length
       raise ArgumentError, "Wrong number of binds"
     end
 
-    add_returning(sql) if @returning.present? and not sql.match? /\bRETURNING\b/i
-    if @returning
-      process_returning _exec_query(sql, binds, prepare: false)
+
+    case as
+    when ActiveRecord::Relation
+      as.send(:instantiate_records, _exec_query(sql, binds, prepare: false))
+    when Class
+      if as < ActiveRecord::Base
+        as.send(:relation).send(:instantiate_records, _exec_query(sql, binds, prepare: false))
+      elsif as.respond_to? :instantiate_records
+        as.instantiate_records(_exec_query(sql, binds, prepare: false))
+      else
+        _exec_query(sql, binds, prepare: false).map { as.new _1 }
+      end
     else
       result = _exec(sql, binds, prepare: false)
       result = result.map(&block).compact if block_given?
       result
     end
-
   rescue => exc
     STDERR.puts exc.inspect, self.inspect
     raise exc
@@ -169,26 +182,22 @@ uuid xml hstore
 
   end
 
-  private def process_returning(result)
-    case @returning
-    when NilClass
-      result
-    when ActiveRecord::Relation
-      @returning.send(:instantiate_records, result)
-    when Proc
-      @returning.call result
-    when Class
-      if @returning < ActiveRecord::Base
-        @returning.send(:relation).send(:instantiate_records, result)
-      elsif @returning.respond_to? :instantiate_records
-        @returning.instantiate_records(result)
-      else
-        result.map { @returning.new _1 }
-      end
-    else
-      raise "Returning not defined"
-    end
-  end
+  # private def process_returning(as, result)
+  #   case as
+  #   when ActiveRecord::Relation
+  #     as.send(:instantiate_records, result)
+  #   when Class
+  #     if as < ActiveRecord::Base
+  #       as.send(:relation).send(:instantiate_records, result)
+  #     elsif as.respond_to? :instantiate_records
+  #       as.instantiate_records(result)
+  #     else
+  #       result.map { as.new _1 }
+  #     end
+  #   else
+  #     raise "Returning not defined"
+  #   end
+  # end
 
   alias exec result
 
