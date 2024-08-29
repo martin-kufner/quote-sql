@@ -28,6 +28,7 @@ class QuoteSql
       "ARRAY#{ary}"
     end
 
+
     # quote ruby regex with a postgres regex
     # @argument regexp [Regex]
     # @return String
