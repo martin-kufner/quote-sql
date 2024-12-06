@@ -7,6 +7,5 @@
     <content url="file://$MODULE_DIR$" />
     <orderEntry type="jdk" jdkName="RVM: ruby-3.2.4 [qb3]" jdkType="RUBY_SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
-    <orderEntry type="library" scope="PROVIDED" name="niceql (v0.6.1, RVM: ruby-3.2.4 [qb3]) [gem]" level="application" />
   </component>
 </module>
