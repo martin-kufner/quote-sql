@@ -35,7 +35,8 @@ uuid xml hstore
     Connector.set(conn)
   end
 
-  def initialize(sql = nil)
+  def initialize(sql = nil, connection: nil)
+    @connection = connection
     @original = sql.respond_to?(:to_sql) ? sql.to_sql : sql.to_s
     @sql = @original.dup
     @quotes = {}

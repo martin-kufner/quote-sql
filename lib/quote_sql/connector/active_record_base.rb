@@ -22,7 +22,7 @@ class QuoteSql
       end
 
       def conn
-        self.class.conn
+        @connection || self.class.conn
       end
 
       def _exec_query(sql, binds = [], **options)
