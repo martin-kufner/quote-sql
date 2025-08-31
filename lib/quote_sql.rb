@@ -133,7 +133,7 @@ uuid xml hstore
     self
   end
 
-  def result(*binds, prepare: false, async: false, as: @returning, &block)
+  def result(*binds, prepare: false, async: false, symbolize_keys: false, as: @returning, &block)
     sql = to_sql
     if binds.present? and sql.scan(/(?<=\$)\d+/).map(&:to_i).max != binds.length
       raise ArgumentError, "Wrong number of binds"
@@ -154,6 +154,7 @@ uuid xml hstore
     else
       result = _exec(sql, binds, prepare: false)
       result = result.map(&block).compact if block_given?
+      result.each { |row| row.each_value { _1.deep_symbolize_keys! if _1.is_a?(Hash) or _1.is_a?(Array) } } if symbolize_keys
       result
     end
   rescue => exc
