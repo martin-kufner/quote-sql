@@ -255,13 +255,13 @@ uuid xml hstore
     @resolved.any? { _2.is_a? Exception }
   end
 
-  MIXIN_RE = /(%\{?([a-z][a-z0-9_]*)}|%([a-z][a-z0-9_]*)\b)/im
+  MIXIN_RE = /([$%]\{?([a-z][a-z0-9_]*)}|[$%]([a-z][a-z0-9_]*)\b)/im
 
   def key_matches
     @sql.scan(MIXIN_RE).map do |full, *key|
       key = key.compact[0]
       has_quote = @quotes.key?(key.to_sym) || key.match?(/(table|columns)$/)
-      [full, key, has_quote]
+      [Regexp.escape( full ), key, has_quote]
     end
   end
 

@@ -5,14 +5,14 @@ class QuoteSql::Test
     expected <<~SQL
       SELECT x, "a", "b", "c", "d"
     SQL
-    "SELECT x, %x_columns ".quote_sql(x_columns: %i[a b c d])
+    "SELECT x, $x_columns ".quote_sql(x_columns: %i[a b c d])
   end
 
   def test_columns_and_table_name_simple
     expected <<~SQL
       SELECT "my_table"."a", "b", "gaga"."c", "my_table"."e" AS "d", "gaga"."d" AS "f", 1 + 2 AS "g", whatever AS raw FROM "my_table"
     SQL
-    QuoteSql.new("SELECT %columns FROM %table").quote(
+    QuoteSql.new("SELECT $columns FROM $table").quote(
       columns: [:a, "b", "gaga.c", { d: :e, f: "gaga.d", g: Arel.sql("1 + 2") }, Arel.sql("whatever AS raw")],
       table: "my_table"
     )
@@ -22,7 +22,7 @@ class QuoteSql::Test
     expected <<~SQL
       SELECT "table1"."a","table1"."c" as "b" FROM "table1","table2"
     SQL
-    QuoteSql.new("SELECT %columns FROM %table").quote(
+    QuoteSql.new("SELECT $columns FROM $table").quote(
       columns: [:a, b: :c],
       table: ["table1", "table2"]
     )
@@ -30,9 +30,9 @@ class QuoteSql::Test
 
   def test_recursive_injects
     expected %(SELECT TRUE FROM "table1")
-    QuoteSql.new("SELECT %raw FROM %table").quote(
-      raw: "%recurse1_raw",
-      recurse1_raw: "%recurse2",
+    QuoteSql.new("SELECT $raw FROM $table").quote(
+      raw: "$recurse1_raw",
+      recurse1_raw: "$recurse2",
       recurse2: true,
       table: "table1"
     )
@@ -42,7 +42,7 @@ class QuoteSql::Test
     expected <<~SQL
       SELECT 'a text', 123, '{"abc":"don''t"}'::jsonb FROM "my_table"
     SQL
-    QuoteSql.new("SELECT %text, %{number}, %hash FROM %table").quote(
+    QuoteSql.new("SELECT $text, ${number}, $hash FROM $table").quote(
       text: "a text",
       number: 123,
       hash: { abc: "don't" },
@@ -66,7 +66,7 @@ class QuoteSql::Test
                 {name: "Task2", updated_at: }
     ]
     QuoteSql.new(<<~SQL).quote(table:, insert_values:)
-        INSERT INTO %table %insert_values
+        INSERT INTO $table $insert_values
     SQL
   end
 
@@ -85,7 +85,7 @@ class QuoteSql::Test
       {name: "Task2", id: "12345" }
     ]
     QuoteSql.new(<<~SQL).quote(table:, insert_values:, columns: %i[name])
-        INSERT INTO %table %insert_values
+        INSERT INTO $table $insert_values
     SQL
   end
 
@@ -94,7 +94,7 @@ class QuoteSql::Test
     expected <<~SQL
       SELECT * FROM (VALUES ('a', 1, true, NULL), ('a', 1, true, NULL), (NULL, 1, NULL, 2)) AS "y" ("a", "b", "c", "d")
     SQL
-    "SELECT * FROM %y_values".quote_sql(y_values: [
+    "SELECT * FROM $y_values".quote_sql(y_values: [
       { a: 'a', b: 1, c: true, d: nil },
       { d: nil, a: 'a', c: true, b: 1 },
       { d: 2, b: 1 }
@@ -105,7 +105,7 @@ class QuoteSql::Test
     expected <<~SQL
       SELECT * FROM (VALUES (NULL, true, 1, 'a')) AS "x" ("d","c","b","a")
     SQL
-    "SELECT * FROM %x_values".quote_sql(x_columns: %i[d c b a], x_values: [{ a: 'a', b: 1, c: true, d: nil }])
+    "SELECT * FROM $x_values".quote_sql(x_columns: %i[d c b a], x_values: [{ a: 'a', b: 1, c: true, d: nil }])
   end
 
   def test_from_values_hash_with_type_columns
@@ -117,7 +117,7 @@ class QuoteSql::Test
                         (NULL, 1, NULL, 2)
                   ) AS "x" ("a", "b", "c", "d")
     SQL
-    "SELECT * FROM %x_values".quote_sql(
+    "SELECT * FROM $x_values".quote_sql(
       x_casts: {
         a: "text",
         b: "integer",
@@ -136,14 +136,14 @@ class QuoteSql::Test
     expected <<~SQL
       INSERT INTO x ("a", "b", "c", "d") VALUES ('a', 1, true, NULL)
     SQL
-    "INSERT INTO x %insert_values".quote_sql(insert_values: [{ a: 'a', b: 1, c: true, d: nil }])
+    "INSERT INTO x $insert_values".quote_sql(insert_values: [{ a: 'a', b: 1, c: true, d: nil }])
   end
 
   def test_from_json
     expected <<~SQL
       SELECT * FROM json_to_recordset('[{"a":1,"b":"foo"},{"a":"2"}]') as "x" ("a" int, "b" text)
     SQL
-    "SELECT * FROM %x_json".quote_sql(x_casts: { a: "int", b: "text" }, x_json: [{ a: 1, b: 'foo' }, { a: '2', c: 'bar' }])
+    "SELECT * FROM $x_json".quote_sql(x_casts: { a: "int", b: "text" }, x_json: [{ a: 1, b: 'foo' }, { a: '2', c: 'bar' }])
   end
 
   def test_json_insert
@@ -151,21 +151,21 @@ class QuoteSql::Test
       INSERT INTO users ("name", "color") SELECT * from json_to_recordset('[{"name":"auge","color":"#611333"}]') AS "json"("name" text,"color" text)
     SQL
     json = { "first_name" => nil, "last_name" => nil, "stripe_id" => nil, "credits" => nil, "avatar" => nil, "name" => "auge", "color" => "#611333", "founder" => nil, "language" => nil, "country" => nil, "data" => {}, "created_at" => "2020-11-19T09:30:18.670Z", "updated_at" => "2020-11-19T09:40:00.063Z" }
-    "INSERT INTO users (%columns) SELECT * from %json".quote_sql(columns: %i[name color], json:)
+    "INSERT INTO users ($columns) SELECT * from $json".quote_sql(columns: %i[name color], json:)
   end
 
   def test_from_json_bind
     expected <<~SQL
       Select * From json_to_recordset($1) AS "x"("a" int,"b" text,"c" boolean)
     SQL
-    QuoteSQL("Select * From %x_json", x_json: 1, x_casts: { a: "int", b: "text", c: "boolean" })
+    QuoteSQL("Select * From $x_json", x_json: 1, x_casts: { a: "int", b: "text", c: "boolean" })
   end
 
   def test_insert_json_bind
     expected <<~SQL
       INSERT INTO table ("a","b","c") Select * From json_to_recordset($1) AS "x"("a" int,"b" text,"c" boolean)  
     SQL
-    QuoteSQL("INSERT INTO table (%x_columns) Select * From %x_json", x_json: 1, x_casts: { a: "int", b: "text", c: "boolean" })
+    QuoteSQL("INSERT INTO table ($x_columns) Select * From $x_json", x_json: 1, x_casts: { a: "int", b: "text", c: "boolean" })
   end
 
   def test_cast_values
@@ -186,15 +186,15 @@ class QuoteSql::Test
     hash = { foo: "bar", "go": 1, strip_null: nil }
     QuoteSQL(<<~SQL, field1: 'abc', array1:, array2:, array3:, array4:, hash:, not_compact: hash, compact: hash.merge(nil => false))
       SELECT 
-        %field1::TEXT, 
-        %field1::JSON,
-        %array1,
-        %array2::TEXT[],
-        %array3::JSON[], 
-        %not_compact not_compact,
-        %compact::JSON compact,
-        %hash::HSTORE,
-        %array4::INT[][]
+        $field1::TEXT, 
+        $field1::JSON,
+        $array1,
+        $array2::TEXT[],
+        $array3::JSON[], 
+        $not_compact not_compact,
+        $compact::JSON compact,
+        $hash::HSTORE,
+        $array4::INT[][]
     SQL
   end
 
@@ -210,8 +210,8 @@ class QuoteSql::Test
     relationship_columns = profile_columns = %i[a b]
 
     <<~SQL.quote_sql(profile_columns:, profile_table:, relationship_columns:, relationship_table:)
-      SELECT %profile_columns, %relationship_columns, 
-        relationship_timestamp(%relationship_table.*)
+      SELECT $profile_columns, $relationship_columns, 
+        relationship_timestamp($relationship_table.*)
     SQL
   end
 
@@ -235,7 +235,7 @@ class QuoteSql::Test
       SELECT "id", "first_name", "n1", "v1", "created_at", "updated_at" FROM "users"
     SQL
     <<~SQL.quote_sql(table:)
-        SELECT %columns FROM %table
+        SELECT $columns FROM $table
     SQL
   end
 
@@ -249,7 +249,7 @@ class QuoteSql::Test
   #     SQL
   #
   #   QuoteSql.new(<<-SQL).
-  #       INSERT INTO %table (%columns) VALUES %insert_values
+  #       INSERT INTO $table ($columns) VALUES $insert_values
   #         ON CONFLICT (responses_task_id_index_unique) DO NOTHING;
   #     SQL
   #     quote(
@@ -375,14 +375,14 @@ class QuoteSql::Test
 
       l = line.gsub(/\s+/, &spaces).gsub(/(?<=\()\d+|\d+(?=\))/) { "#{spaces.call}#{rand(10) + 1}#{spaces.call}" }.gsub(/\(/) { "#{spaces.call}(" }
 
-      m = "jgj hsgjhsgfjh ag %field::#{l} asldfalskjdfl".match(QuoteSql::CASTS)
+      m = "jgj hsgjhsgfjh ag $field::#{l} asldfalskjdfl".match(QuoteSql::CASTS)
       if m.present? and l == m[1]
         success << line
       else
         errors[line] = m&.to_a
       end
       line = line + "[]" * (rand(3) + 1)
-      m = "jgj hsgjhsgfjh ag %field::#{line} asldfalskjdfl".match(QuoteSql::CASTS)
+      m = "jgj hsgjhsgfjh ag $field::#{line} asldfalskjdfl".match(QuoteSql::CASTS)
       if m.present? and line == m[1] + m[2]
         success << line
       else
