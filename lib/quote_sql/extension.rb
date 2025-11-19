@@ -4,8 +4,8 @@ class QuoteSql
       other.include QuoteSql::Formater
     end
 
-    def quote_sql(**)
-      QuoteSql.new(self).quote(**)
+    def quote_sql(connection=nil, **)
+      QuoteSql.new(self, connection:).quote(**)
     end
 
     alias qsql quote_sql

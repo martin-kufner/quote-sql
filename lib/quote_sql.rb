@@ -36,7 +36,12 @@ uuid xml hstore
   end
 
   def initialize(sql = nil, connection: nil)
-    @connection = connection
+    if connection.is_a?(Symbol) or connection.is_a?(String)
+      dev_config = ActiveRecord::Base.configurations.configs_for(env_name: connection.to_s).first.configuration_hash
+      @connection = ActiveRecord::Base.establish_connection(dev_config).connection
+    else
+      @connection = connection
+    end
     @original = sql.respond_to?(:to_sql) ? sql.to_sql : sql.to_s
     @sql = @original.dup
     @quotes = {}
