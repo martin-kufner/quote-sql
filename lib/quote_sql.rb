@@ -159,7 +159,11 @@ uuid xml hstore
     else
       result = _exec(sql, binds, prepare: false)
       result = result.map(&block).compact if block_given?
-      result.each { |row| row.each_value { _1.deep_symbolize_keys! if _1.is_a?(Hash) or _1.is_a?(Array) } } if symbolize_keys
+      if symbolize_keys
+        result.each do |row|
+          row.deep_symbolize_keys!
+        end
+      end
       result
     end
   rescue => exc
