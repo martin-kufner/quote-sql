@@ -24,7 +24,7 @@ class QuoteSql::Test
     SQL
     QuoteSql.new("SELECT $columns FROM $table").quote(
       columns: [:a, b: :c],
-      table: ["table1", "table2"]
+      table: %w(table1 table2)
     )
   end
 
