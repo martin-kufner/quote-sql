@@ -32,9 +32,12 @@ class QuoteSql
       def _exec(sql, binds = [], **options)
         result = _exec_query(sql, binds, **options)
         columns = result.columns.map(&:to_sym)
+        multi_columns = columns.length > 1
         result.cast_values.map do |row|
-          row = [row] unless row.is_a? Array
+          row = [row] unless multi_columns
           [columns, row].transpose.to_h
+        rescue => exc
+          raise exc
         end
       end
     end
