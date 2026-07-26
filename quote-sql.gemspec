@@ -13,5 +13,8 @@ QuoteSql helps you creating SQL queries and proper quoting especially with advan
   s.homepage    = "https://github.com/martin-kufner/quote-sql"
   s.license     = "MIT"
   s.required_ruby_version = '~> 3.0'
-  s.add_dependency 'niceql'
+  # s.add_dependency 'niceql'
+  s.add_dependency 'sql_beautifier'
+  # s.add_dependency 'anbt-sql-formatter'
+  s.add_dependency 'rouge'
 end
